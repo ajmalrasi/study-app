@@ -67,7 +67,7 @@
 <body>
 <header>
   <button id="back" hidden aria-label="Back">←</button>
-  <h1 id="title">Study Notes</h1>
+  <h1 id="title" title="Back to all lessons" style="cursor:pointer">Study Notes</h1>
   <button id="reviewBtn" class="primary">Review <span id="dueCount"></span></button>
 </header>
 <main id="app"></main>
@@ -277,8 +277,8 @@ async function lesson(id, tab) {
       <a class="btn" href="${esc(l.url_key)}" target="_blank">Open lesson ↗</a>
       <span id="procState" class="muted">${l.job?.status === "error" ? `<span class="err">⚠ ${esc(l.job.error)}</span>` : job ? esc(l.job.step) : ""}</span>
     </div>`;
-  document.querySelectorAll(".tabs [data-t]").forEach((b) => b.onclick = () => (location.hash = `#lesson/${id}/${b.dataset.t}`));
-  $("#revLesson")?.addEventListener("click", () => review(id));
+  document.querySelectorAll(".tabs [data-t]").forEach((b) => b.onclick = () => location.replace(`#lesson/${id}/${b.dataset.t}`));
+  $("#revLesson")?.addEventListener("click", () => (location.hash = `#review/${id}`));
   if (tab === "study" && l.study_notes) wireStudy(l, id);
   $("#proc").onclick = async () => {
     try { await api(`/api/lessons/${id}/process`, { method: "POST" }); lesson(id, tab); }
@@ -317,11 +317,18 @@ function route() {
   const h = location.hash;
   const m = h.match(/^#lesson\/(\d+)(?:\/(\w+))?/), sm = h.match(/^#(search|ask)(?:\/(.*))?$/);
   const q = sm ? decodeURIComponent(sm[2] || "") : "";
-  const p = m ? lesson(m[1], m[2]) : h === "#review" ? review() : sm ? (sm[1] === "ask" && q ? askPage(q) : searchPage(q)) : home();
+  const rm = h.match(/^#review(?:\/(\d+))?$/);
+  const p = m ? lesson(m[1], m[2]) : rm ? review(rm[1]) : sm ? (sm[1] === "ask" && q ? askPage(q) : searchPage(q)) : home();
   p.catch((e) => $("#app").innerHTML = `<div class="empty err">⚠ ${esc(e.message)}</div>`);
   window.scrollTo(0, 0);
 }
-$("#back").onclick = () => history.length > 1 ? history.back() : (location.hash = "");
+// ← goes up one level (lesson → list, reviewing a lesson → that lesson), not back through every click.
+function parentOf(h) {
+  const rv = h.match(/^#review\/(\d+)/);
+  return rv ? `#lesson/${rv[1]}` : "";
+}
+$("#back").onclick = () => location.replace(parentOf(location.hash) || "#");
+$("#title").onclick = () => location.replace("#");
 $("#reviewBtn").onclick = () => location.hash === "#review" ? route() : (location.hash = "review");
 window.addEventListener("hashchange", route);
 route();
