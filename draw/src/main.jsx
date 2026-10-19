@@ -66,6 +66,12 @@ async function loadInitialData(note) {
   return { elements: [], appState: { ...PEN, viewBackgroundColor: "#ffffff", currentItemStrokeColor: "#1e1e1e" } };
 }
 
+/** Zoom so the screenshot fills the window (it was placed at a fixed size, which looks tiny in a big window). */
+function fitSlide(api) {
+  const slide = api?.getSceneElements().find((e) => e.type === "image" && !e.isDeleted);
+  if (slide) api.scrollToContent(slide, { fitToViewport: true, viewportZoomFactor: 0.95, animate: false });
+}
+
 const signature = (elements) => elements.reduce((s, e) => s + e.version * 31 + (e.isDeleted ? 7 : 1), elements.length);
 
 function App() {
@@ -150,11 +156,15 @@ function App() {
     const onLeave = (e) => {
       if (apiRef.current && savedSig.current !== signature(apiRef.current.getSceneElements())) e.preventDefault();
     };
+    let resizeTimer;
+    const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => fitSlide(apiRef.current), 150); };
     window.addEventListener("keydown", onKey);
     window.addEventListener("beforeunload", onLeave);
+    window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("beforeunload", onLeave);
+      window.removeEventListener("resize", onResize);
     };
   }, [save]);
 
@@ -183,7 +193,10 @@ function App() {
         <Excalidraw
           excalidrawAPI={(api) => {
             apiRef.current = api;
-            setTimeout(() => api.setActiveTool({ type: "freedraw" }), 0); // pen selected on open
+            setTimeout(() => {
+              api.setActiveTool({ type: "freedraw" }); // pen selected on open
+              fitSlide(api);
+            }, 50);
           }}
           initialData={initialData}
           onChange={onChange}

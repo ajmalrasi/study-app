@@ -206,9 +206,13 @@ export async function addNote(tab, p, fields) {
 export async function openDrawing(noteId, { resumeTabId = null, draft = false } = {}) {
   const { serverUrl } = await settings();
   const url = `${serverUrl}/draw/?note=${noteId}`;
-  // As big as the screen, so there's room to draw.
-  const win = await chrome.windows.create({ url, type: "popup", state: "maximized" })
-    .catch(() => chrome.windows.create({ url, type: "popup", width: 1600, height: 1000 }));
+  // A large normal window: ~90% of the browser window, centred over it.
+  const b = await chrome.windows.getLastFocused().catch(() => null);
+  const size = b?.width && b?.height
+    ? { width: Math.round(b.width * 0.9), height: Math.round(b.height * 0.9) }
+    : { width: 1400, height: 900 };
+  if (b?.left != null) Object.assign(size, { left: b.left + Math.round((b.width - size.width) / 2), top: b.top + Math.round((b.height - size.height) / 2) });
+  const win = await chrome.windows.create({ url, type: "popup", ...size });
   if (resumeTabId != null || draft) {
     const { drawingWindows = {} } = await chrome.storage.local.get("drawingWindows");
     await chrome.storage.local.set({ drawingWindows: { ...drawingWindows, [win.id]: { noteId, resumeTabId, draft } } });
