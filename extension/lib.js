@@ -51,7 +51,12 @@ async function run(tabId, func, args = [], world = "MAIN") {
 }
 
 export const probe = (tabId) => run(tabId, probePage).catch(() => null);
-export const control = (tabId, action, value) => run(tabId, controlVideo, [action, value]).catch(() => false);
+// executeScript rejects `undefined` args, so pause/play (which have no value) must send null.
+export const control = (tabId, action, value = null) =>
+  run(tabId, controlVideo, [action, value]).catch((e) => {
+    console.warn(`video ${action} failed`, e);
+    return false;
+  });
 export const transcript = (tabId) => run(tabId, fetchTranscript);
 export const currentTime = (tabId) => run(tabId, videoTime).catch(() => null);
 
