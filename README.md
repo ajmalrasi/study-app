@@ -17,12 +17,16 @@ Chrome extension (Mac/Linux)  ──►  Raspberry Pi :8765 (server, data, revie
 
 ## Install the Chrome extension (once per computer)
 
+```bash
+git clone https://github.com/ajmalrasi/study-app.git ~/tgs/study-app
+```
+
 1. Open `chrome://extensions` and turn on **Developer mode** (top right).
-2. Click **Load unpacked** and pick the `extension/` folder of this repo.
+2. Click **Load unpacked** and pick `~/tgs/study-app/extension`.
 3. Pin it from the puzzle-piece menu. Clicking the icon opens the side panel.
 4. Optional: change hotkeys at `chrome://extensions/shortcuts`.
 
-On Linux, copy or clone the repo there and load the same `extension/` folder.
+**Update:** `git -C ~/tgs/study-app pull`, then click ↻ on Study Notes in `chrome://extensions`.
 
 ## While watching
 
@@ -76,7 +80,7 @@ Snapshot nightly at 03:30 to `~/backups/study_notes/` (14 days kept).
 
 ```bash
 deploy/deploy.sh            # build Excalidraw editor, rsync to the Pi, restart the service
-deploy/push-extension.sh    # copy the extension to 192.168.3.210:/home/ajmalrasi/tgs/study
+deploy/push-extension.sh    # alternative to git: rsync the extension to 192.168.3.210 over SSH
 ```
 
 Local dev: `cd server && NOTES_DATA=/tmp/study-notes-dev uvicorn app:app --port 8765 --reload`
