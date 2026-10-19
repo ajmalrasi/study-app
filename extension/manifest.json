@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Study Notes",
+  "version": "0.3.0",
+  "description": "Timestamped notes, screenshots and Excalidraw sketches for course videos, processed by your local LLM.",
+  "permissions": ["sidePanel", "storage", "unlimitedStorage", "scripting", "tabs", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": { "default_title": "Study Notes", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "content_scripts": [
+    { "matches": ["https://learn.deeplearning.ai/*"], "js": ["content.js"], "run_at": "document_idle" }
+  ],
+  "commands": {
+    "quick-note": { "suggested_key": { "default": "Alt+N" }, "description": "Note at the current video time" },
+    "screenshot": { "suggested_key": { "default": "Alt+S" }, "description": "Screenshot the video" },
+    "draw": { "suggested_key": { "default": "Alt+D" }, "description": "Screenshot and draw on it" },
+    "bookmark": { "suggested_key": { "default": "Alt+B" }, "description": "Bookmark this moment as important" },
+    "quote": { "description": "Save what's being said right now as a quote (set a key at chrome://extensions/shortcuts)" }
+  }
+}

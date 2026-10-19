@@ -1,0 +1,6 @@
+[Unit]
+Description=Snapshot Study Notes data
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash %h/apps/study_notes/backup.sh

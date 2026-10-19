@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Study Notes</title>
+<link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+<header>
+  <div class="head-row">
+    <div class="titles">
+      <div id="lessonTitle">Study Notes</div>
+      <div id="lessonSub" class="muted"></div>
+    </div>
+    <span id="status" class="dot" title="Server status"></span>
+    <button id="settingsBtn" class="icon" title="Settings">⚙</button>
+  </div>
+  <form id="settings" hidden>
+    <label>Server URL <input id="serverUrl" type="url" required></label>
+    <label class="check"><input id="pauseOnNote" type="checkbox"> Pause video while typing a note</label>
+    <label class="check"><input id="resumeAfterDraw" type="checkbox"> Resume video when the drawing window closes</label>
+    <label class="check"><input id="autoTranscript" type="checkbox"> Save every lesson's transcript automatically</label>
+    <div class="muted">Hotkeys: Alt+N note · Alt+S screenshot · Alt+D draw · Alt+B bookmark.
+      “Save quote” has no default key. Set keys at <code>chrome://extensions/shortcuts</code>.</div>
+    <button type="submit">Save</button>
+  </form>
+  <div class="tools" id="tools">
+    <button id="bookmarkBtn" title="Bookmark (Alt+B)">⭐ Bookmark</button>
+    <button id="shotBtn" title="Screenshot (Alt+S)">📷 Shot</button>
+    <button id="drawBtn" title="Screenshot + draw (Alt+D)">✏️ Draw</button>
+    <button id="sketchBtn" title="Blank Excalidraw sketch">🖊 Sketch</button>
+    <button id="quoteBtn" title="Save what's being said right now">💬 Quote</button>
+  </div>
+  <div class="views" id="views">
+    <button data-view="notes" class="on">Notes</button>
+    <button data-view="transcript">Transcript</button>
+    <span class="spacer"></span>
+    <button id="askBtn" class="link" title="Search and ask across all saved lessons">🔎 Search / Ask ↗</button>
+  </div>
+</header>
+
+<main id="timeline"></main>
+<main id="transcript" hidden>
+  <div id="cues"></div>
+</main>
+<div id="selectionBar" hidden><span id="selectionInfo" class="muted"></span><button id="saveSelection" class="primary">💬 Save as note</button></div>
+
+<footer>
+  <div id="composer">
+    <div class="composer-top"><span id="composeTime" class="ts"></span><span class="muted">Enter to save · Shift+Enter new line</span></div>
+    <textarea id="noteInput" rows="2" placeholder="Type a note… (time is taken when you start typing)"></textarea>
+  </div>
+  <div class="actions">
+    <span id="transcriptState" class="muted"></span>
+    <span class="spacer"></span>
+    <button id="openReview" title="Open notes on the server">Open ↗</button>
+    <button id="processBtn" class="primary">✨ Process lesson</button>
+  </div>
+  <div id="jobState" class="muted"></div>
+  <div id="syncState" class="muted"></div>
+</footer>
+<script type="module" src="sidepanel.js"></script>
+</body>
+</html>

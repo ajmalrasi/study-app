@@ -1,0 +1,17 @@
+[Unit]
+Description=Study Notes server (lecture notes + LLM study material)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/apps/study_notes
+Environment=NOTES_DATA=%h/apps/study_notes/data
+EnvironmentFile=-%h/.config/study-notes.env
+ExecStart=%h/apps/study_notes/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
