@@ -205,7 +205,10 @@ export async function addNote(tab, p, fields) {
  * and deletes the note if it was a `draft` that was never saved. */
 export async function openDrawing(noteId, { resumeTabId = null, draft = false } = {}) {
   const { serverUrl } = await settings();
-  const win = await chrome.windows.create({ url: `${serverUrl}/draw/?note=${noteId}`, type: "popup", width: 1280, height: 860 });
+  const url = `${serverUrl}/draw/?note=${noteId}`;
+  // As big as the screen, so there's room to draw.
+  const win = await chrome.windows.create({ url, type: "popup", state: "maximized" })
+    .catch(() => chrome.windows.create({ url, type: "popup", width: 1600, height: 1000 }));
   if (resumeTabId != null || draft) {
     const { drawingWindows = {} } = await chrome.storage.local.get("drawingWindows");
     await chrome.storage.local.set({ drawingWindows: { ...drawingWindows, [win.id]: { noteId, resumeTabId, draft } } });
