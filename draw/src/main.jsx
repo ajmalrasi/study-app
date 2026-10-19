@@ -34,7 +34,9 @@ const imageSize = (src) =>
   });
 
 // Open ready to draw: pen tool, thinnest line, fully opaque (red on slides, dark on blank sketches).
-const PEN = { currentItemStrokeWidth: 1, currentItemOpacity: 100, currentItemRoughness: 0, currentItemStrokeStyle: "solid" };
+// Zen mode hides the style panel (colour/width/opacity/layers) that Excalidraw shows for every tool.
+const PEN = { currentItemStrokeWidth: 1, currentItemOpacity: 100, currentItemRoughness: 0, currentItemStrokeStyle: "solid",
+  zenModeEnabled: true };
 
 async function loadInitialData(note) {
   if (note.scene) {
@@ -170,6 +172,10 @@ function App() {
         <span className={`status ${status}`}>
           {{ saved: "✓ Saved", saving: "Saving…", unsaved: "● Not saved", error: `⚠ ${error}` }[status] || ""}
         </span>
+        <button title="Show or hide colour, width and opacity" onClick={() => {
+          const api = apiRef.current;
+          api?.updateScene({ appState: { zenModeEnabled: !api.getAppState().zenModeEnabled } });
+        }}>🎨 Style</button>
         <button onClick={() => save()}>Save</button>
         <button className="primary" onClick={saveAndClose}>Save &amp; close</button>
       </div>
