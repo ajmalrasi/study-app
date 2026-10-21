@@ -58,7 +58,7 @@ chrome.windows.onRemoved.addListener(async (winId) => {
 });
 
 // Save every lesson's transcript as soon as its video loads, notes or not.
-const LESSON_URL = /^https:\/\/learn\.deeplearning\.ai\/courses\/[^/]+\/lesson\//;
+const LESSON_URL = /^https:\/\/(?:learn\.deeplearning\.ai\/courses\/[^/]+\/lesson\/|(?:[a-z0-9-]+\.)?udemy\.com\/course\/[^/]+\/learn\/lecture\/)/;
 const autoSaving = new Map(); // tabId -> lesson URL being saved
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if ((info.url || info.status === "complete") && LESSON_URL.test(tab.url || "")) autoSaveTranscript(tabId, tab.url);

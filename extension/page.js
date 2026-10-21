@@ -5,7 +5,11 @@
 export function probePage() {
   const videos = [...document.querySelectorAll("video")];
   const video = videos.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
-  const url = location.href;
+  const lessonUrl = new URL(location.href);
+  lessonUrl.hash = "";
+  const udemy = /(^|\.)udemy\.com$/.test(location.hostname);
+  if (udemy) lessonUrl.search = "";
+  const url = lessonUrl.href;
   const m = location.pathname.match(/\/courses\/([^/]+)\/lesson\/[^/]+\/([^/?#]+)/);
   let title = document.title, course = "", courseSlug = "", module = "";
   if (m) {
@@ -15,6 +19,19 @@ export function probePage() {
     title = slug.charAt(0).toUpperCase() + slug.slice(1);
     const crumb = [...document.querySelectorAll("nav, header")].map((n) => n.innerText).join(" ");
     module = (crumb.match(/Module\s+\d+/i) || [""])[0];
+  }
+  if (udemy) {
+    const match = location.pathname.match(/\/course\/([^/]+)(?:\/learn\/lecture\/(\d+))?/);
+    if (match) {
+      courseSlug = `udemy-${match[1]}`;
+      const text = (selector) => document.querySelector(selector)?.textContent?.trim();
+      course = text('[data-purpose="course-title"]') || text('header h1') || match[1].replace(/-/g, " ");
+      title = text('[data-purpose="lecture-title"]') || text('[aria-current="true"] [data-purpose="item-title"]') ||
+        (match[2] ? `Lecture ${match[2]}` : document.title);
+      module = text('[data-purpose="section-panel"]:has([aria-current="true"]) [data-purpose="section-heading"]') || "";
+      // A landing-page preview must not be saved as an enrolled lecture.
+      if (!match[2]) return { hasVideo: false, url, title, course, courseSlug, module };
+    }
   }
   if (!video) return { hasVideo: false, url, title, course, courseSlug, module };
   // The <video> can report a 0 height while its container is what's visible.
@@ -67,6 +84,23 @@ export async function fetchTranscript() {
     return parts.map((p, i) => (i ? p.replace(/^WEBVTT[^\n]*\n(X-TIMESTAMP[^\n]*\n)?/, "") : p)).join("\n\n");
   };
   try {
+    // Udemy's Shaka player renders captions itself, without native <track> elements.
+    // Ask for the current lecture only; earlier lectures' resource URLs can remain loaded.
+    if (/(^|\.)udemy\.com$/.test(location.hostname)) {
+      const lectureId = location.pathname.match(/\/learn\/lecture\/(\d+)/)?.[1];
+      const root = document.querySelector('[data-module-id="course-taking"]');
+      const courseId = JSON.parse(root?.getAttribute("data-module-args") || "{}").courseId;
+      if (!lectureId || !courseId) return { error: "Udemy lecture is still loading", retry: true };
+      const endpoint = `/api-2.0/users/me/subscribed-courses/${courseId}/lectures/${lectureId}/?fields[lecture]=asset&fields[asset]=captions`;
+      const lecture = JSON.parse(await get(endpoint));
+      const captions = (lecture.asset?.captions || []).filter((c) => c.url && c.status !== 0);
+      const caption = captions.find((c) => isEnglish(c.locale_id || c.language)) || captions[0];
+      if (!caption) return { error: "No captions available for this Udemy lecture" };
+      const vtt = await loadSubs(caption.url);
+      if (location.pathname.match(/\/learn\/lecture\/(\d+)/)?.[1] !== lectureId)
+        return { error: "Lecture changed while loading captions", retry: true };
+      return { vtt, src: caption.url };
+    }
     // 1. <track> elements (logged-out preview of DLAI, many other sites).
     const track = [...video.querySelectorAll("track")].find((t) => isEnglish(t.srclang)) || video.querySelector("track");
     if (track?.src) return { vtt: await loadSubs(track.src), src: track.src };

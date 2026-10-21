@@ -1,6 +1,6 @@
 # Study Notes
 
-Take notes while watching course videos (built for DeepLearning.AI), with timestamps,
+Take notes while watching course videos (DeepLearning.AI and Udemy lecture pages), with timestamps,
 screenshots and Excalidraw drawings. Your local LLM on the Jetson then turns them into study notes
 and flashcards.
 
@@ -27,6 +27,15 @@ git clone https://github.com/ajmalrasi/study-app.git ~/tgs/study-app
 4. Optional: change hotkeys at `chrome://extensions/shortcuts`.
 
 **Update:** `git -C ~/tgs/study-app pull`, then click ↻ on Study Notes in `chrome://extensions`.
+
+## Udemy
+
+Open an enrolled lecture (`/course/<course>/learn/lecture/<id>`), then open Study Notes.
+Course landing pages and their promotional previews are not lecture pages. Notes are grouped
+by course and lecture; coupon and playback query parameters are removed from saved links.
+Automatic transcripts read the current lecture's captions through your signed-in Udemy
+session, including players that do not expose native subtitle tracks. Availability depends
+on captions being provided for that lecture; English is preferred when available.
 
 ## While watching
 
