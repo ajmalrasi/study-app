@@ -14,11 +14,11 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 HERE = Path(__file__).parent
 DATA = Path(os.environ.get("NOTES_DATA", HERE / "data"))
@@ -54,6 +54,13 @@ CREATE TABLE IF NOT EXISTS jobs (
   created REAL, finished REAL);
 CREATE TABLE IF NOT EXISTS answers (
   id INTEGER PRIMARY KEY, lesson_id INTEGER, question TEXT, answer TEXT, feedback TEXT, created REAL);
+CREATE TABLE IF NOT EXISTS card_reviews (
+  id TEXT PRIMARY KEY, card_id INTEGER, correct INTEGER, previous_box INTEGER, previous_due REAL,
+  box INTEGER, due REAL, version INTEGER, created REAL, undone INTEGER DEFAULT 0);
+CREATE INDEX IF NOT EXISTS cards_due ON cards(due);
+CREATE INDEX IF NOT EXISTS cards_lesson ON cards(lesson_id);
+CREATE INDEX IF NOT EXISTS notes_lesson ON notes(lesson_id);
+CREATE INDEX IF NOT EXISTS jobs_lesson ON jobs(lesson_id, id);
 -- Full-text index over transcript paragraphs and my notes; rebuilt per lesson on every change.
 CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
   text, lesson_id UNINDEXED, t UNINDEXED, kind UNINDEXED, tokenize='porter unicode61');
@@ -70,6 +77,10 @@ with db() as _c:
     _c.executescript(SCHEMA)
     if "draft" not in [r[1] for r in _c.execute("PRAGMA table_info(notes)")]:
         _c.execute("ALTER TABLE notes ADD COLUMN draft INTEGER DEFAULT 0")
+    if "review_version" not in [r[1] for r in _c.execute("PRAGMA table_info(cards)")]:
+        _c.execute("ALTER TABLE cards ADD COLUMN review_version INTEGER DEFAULT 0")
+    if "title_custom" not in [r[1] for r in _c.execute("PRAGMA table_info(courses)")]:
+        _c.execute("ALTER TABLE courses ADD COLUMN title_custom INTEGER DEFAULT 0")
     # A restart kills any job that was running; mark it so the UI doesn't wait forever.
     _c.execute("UPDATE jobs SET status='error', error='server restarted' WHERE status IN ('queued','running')")
 
@@ -88,6 +99,20 @@ def fmt_t(t):
 
 def slugify(s, n=60):
     return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")[:n] or "untitled"
+
+
+def course_title(title, slug):
+    """Old DLAI captures used the platform name instead of the actual course."""
+    if not title or re.fullmatch(r"DeepLearning\.?AI(?:\s*[-–—]\s*Learning Platform)?", title.strip(), re.I):
+        return " ".join(w.upper() if w.lower() in ("ai", "llm", "llms", "api") else w.capitalize()
+                        for w in (slug or "Other").replace("-", " ").split())
+    return title
+
+
+def course_out(row):
+    d = dict(row)
+    d["title"] = course_title(d["title"], d["slug"])
+    return d
 
 
 def save_data_url(data_url):
@@ -146,7 +171,7 @@ def transcript_chunks(cues, span=30):
             start, buf = None, []
     if buf:
         out.append({"t": start, "text": " ".join(buf)})
-    return out
+    return [{**p, "id": f"p-{round(p['t'] * 1000)}"} for p in out]
 
 
 def transcript_paragraphs(cues, span=30):
@@ -181,8 +206,9 @@ def lesson_out(c, lesson_id):
     d["has_transcript"] = bool(d.pop("transcript"))
     d["study_meta"] = json.loads(les["study_meta"] or "{}")
     course = c.execute("SELECT * FROM courses WHERE id=?", (les["course_id"],)).fetchone()
-    d["course"] = dict(course) if course else None
-    d["notes"] = [note_out(n) for n in c.execute(
+    d["course"] = course_out(course) if course else None
+    cues = lesson_cues(les)
+    d["notes"] = [{**note_out(n), "context": context_at(cues, n["t"])} for n in c.execute(
         "SELECT * FROM notes WHERE lesson_id=? AND draft=0 ORDER BY t IS NULL, t, created", (lesson_id,))]
     d["cards"] = [dict(k) for k in c.execute("SELECT * FROM cards WHERE lesson_id=? ORDER BY t, id", (lesson_id,))]
     d["answers"] = [dict(a) for a in c.execute("SELECT * FROM answers WHERE lesson_id=? ORDER BY id", (lesson_id,))]
@@ -272,8 +298,9 @@ def url_key(url):
 def upsert_lesson(c, body: LessonIn):
     course_id = None
     if body.course_slug:
-        c.execute("INSERT INTO courses (slug, title) VALUES (?,?) ON CONFLICT(slug) DO UPDATE SET title=excluded.title",
-                  (body.course_slug, body.course or body.course_slug))
+        c.execute("""INSERT INTO courses (slug, title) VALUES (?,?) ON CONFLICT(slug) DO UPDATE SET
+                     title=CASE WHEN courses.title_custom=1 THEN courses.title ELSE excluded.title END""",
+                  (body.course_slug, course_title(body.course, body.course_slug)))
         course_id = c.execute("SELECT id FROM courses WHERE slug=?", (body.course_slug,)).fetchone()["id"]
     key, now = url_key(body.url), time.time()
     row = c.execute("SELECT id FROM lessons WHERE url_key=?", (key,)).fetchone()
@@ -312,6 +339,7 @@ def lesson_detail(lesson_id: int):
 def delete_lesson(lesson_id: int):
     with db() as c:
         get_lesson(c, lesson_id)
+        c.execute("DELETE FROM card_reviews WHERE card_id IN (SELECT id FROM cards WHERE lesson_id=?)", (lesson_id,))
         for n in c.execute("SELECT image, drawing, scene FROM notes WHERE lesson_id=?", (lesson_id,)):
             for f in n:
                 remove_file(f)
@@ -329,15 +357,35 @@ def list_courses():
         lessons = c.execute("""
           SELECT l.id, l.title, l.module, l.url_key, l.updated, l.course_id, l.study_notes != '' AS processed,
                  l.transcript != '' AS has_transcript,
+                 (SELECT status FROM jobs j WHERE j.lesson_id=l.id ORDER BY id DESC LIMIT 1) AS job_status,
+                 (SELECT step FROM jobs j WHERE j.lesson_id=l.id ORDER BY id DESC LIMIT 1) AS job_step,
                  (SELECT COUNT(*) FROM notes n WHERE n.lesson_id=l.id AND n.draft=0) AS note_count,
                  (SELECT COUNT(*) FROM cards k WHERE k.lesson_id=l.id) AS card_count
           FROM lessons l ORDER BY l.updated DESC""").fetchall()
-        courses = {r["id"]: {**dict(r), "lessons": []} for r in c.execute("SELECT * FROM courses")}
+        courses = {r["id"]: {**course_out(r), "lessons": []} for r in c.execute("SELECT * FROM courses")}
         other = {"id": None, "slug": "other", "title": "Other", "lessons": []}
         for les in lessons:
             courses.get(les["course_id"], other)["lessons"].append(dict(les))
         out = [v for v in courses.values() if v["lessons"]] + ([other] if other["lessons"] else [])
         return sorted(out, key=lambda v: -max(x["updated"] for x in v["lessons"]))
+
+
+class CoursePatch(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+
+
+@app.patch("/api/courses/{course_id}")
+def rename_course(course_id: int, body: CoursePatch):
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(400, "Enter a course title.")
+    with db() as c:
+        if not c.execute("SELECT id FROM courses WHERE id=?", (course_id,)).fetchone():
+            raise HTTPException(404, "course not found")
+        c.execute("UPDATE courses SET title=?, title_custom=1 WHERE id=?", (title, course_id))
+        for row in c.execute("SELECT id FROM lessons WHERE course_id=?", (course_id,)).fetchall():
+            write_markdown(c, row["id"])
+    return {"id": course_id, "title": title}
 
 
 class TranscriptIn(BaseModel):
@@ -602,12 +650,14 @@ def run_job(job_id):
                   (study, meta, now, les["id"]))
         # Keep review progress for cards whose question survives a re-run.
         old = {k["q"]: k for k in c.execute("SELECT * FROM cards WHERE lesson_id=?", (les["id"],))}
+        generation_version = max(int(now * 1000), max((k["review_version"] for k in old.values()), default=0) + 1)
+        c.execute("DELETE FROM card_reviews WHERE card_id IN (SELECT id FROM cards WHERE lesson_id=?)", (les["id"],))
         c.execute("DELETE FROM cards WHERE lesson_id=?", (les["id"],))
         for k in cards:
             prev = old.get(k["q"])
-            c.execute("INSERT INTO cards (lesson_id, q, a, t, box, due, created) VALUES (?,?,?,?,?,?,?)",
+            c.execute("INSERT INTO cards (lesson_id, q, a, t, box, due, created, review_version) VALUES (?,?,?,?,?,?,?,?)",
                       (les["id"], k["q"], k["a"], k["t"], prev["box"] if prev else 0,
-                       prev["due"] if prev else now, now))
+                       prev["due"] if prev else now, now, generation_version))
         write_markdown(c, les["id"])
         c.execute("UPDATE jobs SET status='done', step='', finished=? WHERE id=?", (now, job_id))
 
@@ -745,7 +795,7 @@ def fts_query(q, mode="and"):
     return " OR ".join(terms)
 
 
-def search_rows(c, q, limit, mode, course_slug=None):
+def search_rows(c, q, limit, mode, course_slug=None, kind=None):
     match = fts_query(q, mode)
     if not match:
         return []
@@ -758,6 +808,9 @@ def search_rows(c, q, limit, mode, course_slug=None):
     if course_slug:
         sql += " AND c.slug = ?"
         args.append(course_slug)
+    if kind in ("note", "transcript"):
+        sql += " AND fts.kind = ?"
+        args.append(kind)
     try:
         return [dict(r) for r in c.execute(sql + " ORDER BY rank LIMIT ?", (*args, limit))]
     except sqlite3.OperationalError:
@@ -765,14 +818,27 @@ def search_rows(c, q, limit, mode, course_slug=None):
 
 
 @app.get("/api/search")
-def search(q: str, limit: int = 30):
+def search(q: str, limit: int = Query(30, ge=1, le=100), course_slug: str | None = None,
+           kind: str = Query("all", pattern="^(all|title|note|transcript)$")):
     """Notes and transcript paragraphs matching all words (falls back to any word).
     Snippets mark matches with \\x02 ... \\x03."""
     with db() as c:
-        rows = search_rows(c, q, limit, "and") or search_rows(c, q, limit, "or")
+        rows = search_rows(c, q, limit, "and", course_slug, kind) or search_rows(c, q, limit, "or", course_slug, kind)
+        if kind != "all":
+            rows = [r for r in rows if r["kind"] == kind]
+        titles = []
+        if q.strip() and kind in ("all", "title"):
+            query = """SELECT l.id AS lesson_id, NULL AS t, 'title' AS kind, l.title AS snip,
+                       l.title, l.url_key, l.module, c.title AS course, c.slug AS course_slug
+                       FROM lessons l LEFT JOIN courses c ON c.id=l.course_id WHERE instr(lower(l.title), ?) > 0"""
+            args = [q.strip().lower()]
+            if course_slug:
+                query += " AND c.slug=?"
+                args.append(course_slug)
+            titles = [dict(r) for r in c.execute(query + " ORDER BY l.updated DESC LIMIT ?", (*args, limit))]
     for r in rows:
         r.pop("text")
-    return {"results": rows}
+    return {"results": (titles + rows)[:limit]}
 
 
 class AskIn(BaseModel):
@@ -801,7 +867,7 @@ def ask(body: AskIn):
         used += len(excerpt)
         parts.append(excerpt)
         sources.append({"n": len(sources) + 1, "lesson_id": r["lesson_id"], "title": r["title"], "t": r["t"],
-                        "url_key": r["url_key"], "kind": r["kind"], "module": r["module"]})
+                        "url_key": r["url_key"], "kind": r["kind"], "module": r["module"], "text": r["text"]})
     try:
         answer = llm(ASK_PROMPT, f"QUESTION: {body.q}\n\nEXCERPTS:\n\n" + "\n\n".join(parts), 700)
     except LLMError as e:
@@ -816,32 +882,98 @@ BOX_DAYS = [0, 1, 3, 7, 14, 30]
 
 class ReviewIn(BaseModel):
     correct: bool
+    request_id: str | None = Field(default=None, min_length=1, max_length=100)
+    expected_version: int | None = None
+
+
+def card_scope(lesson_id=None, course_slug=None):
+    where, args = [], []
+    if lesson_id is not None:
+        where.append("k.lesson_id=?")
+        args.append(lesson_id)
+    if course_slug:
+        where.append("l.course_id IN (SELECT id FROM courses WHERE slug=?)")
+        args.append(course_slug)
+    return (" AND " + " AND ".join(where) if where else ""), args
+
+
+@app.get("/api/review/summary")
+def review_summary(lesson_id: int | None = None, course_slug: str | None = None):
+    scope, args = card_scope(lesson_id, course_slug)
+    with db() as c:
+        row = c.execute("""SELECT COUNT(*) AS total,
+                         COALESCE(SUM(k.due <= ?), 0) AS due, MIN(k.due) AS next_due
+                         FROM cards k JOIN lessons l ON l.id=k.lesson_id WHERE 1=1""" + scope,
+                        (time.time(), *args)).fetchone()
+        return dict(row)
 
 
 @app.get("/api/cards/due")
-def due_cards(limit: int = 30, lesson_id: int | None = None):
+def due_cards(limit: int = Query(30, ge=1, le=500), lesson_id: int | None = None,
+              course_slug: str | None = None):
     with db() as c:
         q = """SELECT k.*, l.title AS lesson_title, l.url_key FROM cards k JOIN lessons l ON l.id=k.lesson_id
                WHERE k.due <= ?"""
         args = [time.time()]
-        if lesson_id:
-            q += " AND k.lesson_id=?"
-            args.append(lesson_id)
-        rows = c.execute(q + " ORDER BY k.due LIMIT ?", (*args, limit)).fetchall()
-        total = c.execute("SELECT COUNT(*) FROM cards").fetchone()[0]
-        return {"cards": [dict(r) for r in rows], "total": total}
+        scope, scope_args = card_scope(lesson_id, course_slug)
+        args.extend(scope_args)
+        rows = c.execute(q + scope + " ORDER BY k.due, k.id LIMIT ?", (*args, limit)).fetchall()
+        counts = c.execute("""SELECT COUNT(*) AS total, COALESCE(SUM(k.due <= ?), 0) AS due
+                              FROM cards k JOIN lessons l ON l.id=k.lesson_id WHERE 1=1""" + scope,
+                           (args[0], *scope_args)).fetchone()
+        return {"cards": [{**dict(r), "again_seconds": 600,
+                           "correct_seconds": BOX_DAYS[min(r["box"] + 1, len(BOX_DAYS) - 1)] * 86400}
+                          for r in rows], **dict(counts)}
 
 
 @app.post("/api/cards/{card_id}/review")
 def review_card(card_id: int, body: ReviewIn):
     with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        request_id = body.request_id or uuid.uuid4().hex
+        previous = c.execute("SELECT * FROM card_reviews WHERE id=?", (request_id,)).fetchone()
+        if previous:
+            if previous["card_id"] != card_id or previous["correct"] != int(body.correct) or previous["undone"]:
+                raise HTTPException(409, "This review request has already been used. Refresh the review session.")
+            return {"box": previous["box"], "due": previous["due"], "review_id": previous["id"],
+                    "review_version": previous["version"]}
         k = c.execute("SELECT * FROM cards WHERE id=?", (card_id,)).fetchone()
         if not k:
             raise HTTPException(404, "card not found")
+        if body.expected_version is not None and body.expected_version != k["review_version"]:
+            raise HTTPException(409, "This card changed in another session. Start a fresh review.")
         box = min(k["box"] + 1, len(BOX_DAYS) - 1) if body.correct else 0
         due = time.time() + (BOX_DAYS[box] * 86400 if body.correct else 600)
-        c.execute("UPDATE cards SET box=?, due=? WHERE id=?", (box, due, card_id))
-        return {"box": box, "due": due}
+        version = k["review_version"] + 1
+        c.execute("UPDATE cards SET box=?, due=?, review_version=? WHERE id=?", (box, due, version, card_id))
+        c.execute("""INSERT INTO card_reviews
+                     (id, card_id, correct, previous_box, previous_due, box, due, version, created)
+                     VALUES (?,?,?,?,?,?,?,?,?)""",
+                  (request_id, card_id, int(body.correct), k["box"], k["due"], box, due, version, time.time()))
+        return {"box": box, "due": due, "review_id": request_id, "review_version": version}
+
+
+class UndoIn(BaseModel):
+    review_id: str = Field(min_length=1, max_length=100)
+
+
+@app.post("/api/cards/{card_id}/undo")
+def undo_review(card_id: int, body: UndoIn):
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        review = c.execute("SELECT * FROM card_reviews WHERE id=? AND card_id=?", (body.review_id, card_id)).fetchone()
+        card = c.execute("SELECT * FROM cards WHERE id=?", (card_id,)).fetchone()
+        if not review or not card:
+            raise HTTPException(404, "This review is no longer available to undo.")
+        if review["undone"]:
+            return {"box": card["box"], "due": card["due"], "review_version": card["review_version"]}
+        if card["review_version"] != review["version"]:
+            raise HTTPException(409, "This card has been reviewed again. Its newer schedule was kept.")
+        version = card["review_version"] + 1
+        c.execute("UPDATE cards SET box=?, due=?, review_version=? WHERE id=?",
+                  (review["previous_box"], review["previous_due"], version, card_id))
+        c.execute("UPDATE card_reviews SET undone=1 WHERE id=?", (body.review_id,))
+        return {"box": review["previous_box"], "due": review["previous_due"], "review_version": version}
 
 
 # Drafts are drawings that were opened but never saved; drop ones older than a day.
@@ -871,6 +1003,7 @@ def health():
 
 
 app.mount("/files", StaticFiles(directory=FILES), name="files")
+app.mount("/assets", StaticFiles(directory=STATIC / "ui"), name="review-assets")
 # Excalidraw editor, built from draw/ by `npm run build` (served at /draw/?note=<id>).
 (STATIC / "draw").mkdir(parents=True, exist_ok=True)
 app.mount("/draw", StaticFiles(directory=STATIC / "draw", html=True), name="draw")

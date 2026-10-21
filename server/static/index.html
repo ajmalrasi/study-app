@@ -1,338 +1,162 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#2f6fde">
-<title>Study Notes</title>
-<style>
-  :root { --bg:#f7f7f5; --card:#fff; --text:#1d1d1f; --muted:#6b6b70; --line:#e4e4e0; --accent:#2f6fde; --chip:#eef3fd; --good:#1f9d55; --bad:#d64545; --star:#d99a00; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#151517; --card:#1f1f22; --text:#ececee; --muted:#9a9aa2; --line:#2e2e33; --accent:#6c9cff; --chip:#24304a; --good:#3fbf74; --bad:#ef6b6b; --star:#f2c14e; } }
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; gap:8px; align-items:center; }
-  header h1 { font-size:17px; margin:0; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  main { max-width:780px; margin:0 auto; padding:16px; }
-  button, .btn { font:inherit; font-size:14px; border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:8px; padding:6px 12px; cursor:pointer; text-decoration:none; display:inline-block; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button:disabled { opacity:.5; }
-  .badge { background:var(--bad); color:#fff; border-radius:10px; padding:0 7px; font-size:12px; margin-left:4px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:22px 0 8px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
-  .lesson { cursor:pointer; display:block; color:inherit; text-decoration:none; }
-  .lesson:hover { border-color:var(--accent); }
-  .meta, .muted { color:var(--muted); font-size:13px; }
-  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
-  .tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .note { border-left:3px solid var(--line); padding:6px 0 6px 12px; margin:6px 0 14px; }
-  .note.bookmark { border-color:var(--star); } .note.shot, .note.sketch { border-color:var(--accent); }
-  .ts { background:var(--chip); color:var(--accent); border-radius:5px; padding:1px 7px; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; text-decoration:none; margin-right:6px; }
-  .note img { max-width:100%; border-radius:8px; border:1px solid var(--line); margin-top:6px; display:block; background:#fff; }
-  .note .said { color:var(--muted); font-size:14px; font-style:italic; margin-top:4px; }
-  .note .tools { margin-top:6px; font-size:13px; } .note .tools a { color:var(--accent); }
-  .md h3 { font-size:16px; margin:18px 0 6px; } .md h3:first-child { margin-top:0; } .md ul { padding-left:22px; margin:4px 0; } .md p { margin:6px 0; }
-  .md code { background:var(--bg); padding:1px 4px; border-radius:4px; font-size:14px; }
-  .flash { min-height:240px; display:flex; flex-direction:column; justify-content:center; text-align:center; font-size:19px; }
-  .flash .a { margin-top:18px; padding-top:18px; border-top:1px dashed var(--line); color:var(--muted); font-size:17px; }
-  .row { display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap; }
-  .good { background:var(--good); border-color:var(--good); color:#fff; } .bad { background:var(--bad); border-color:var(--bad); color:#fff; }
-  .empty { text-align:center; color:var(--muted); padding:40px 0; }
-  .err { color:var(--bad); }
-  form.search { display:flex; gap:8px; margin:4px 0 6px; }
-  form.search input { flex:1; min-width:0; font:inherit; font-size:15px; padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--text); }
-  form.search input:focus { outline:none; border-color:var(--accent); }
-  .hint { color:var(--muted); font-size:13px; margin-bottom:8px; }
-  mark { background:#fff3bf; color:#1d1d1f; border-radius:3px; padding:0 2px; }
-  @media (prefers-color-scheme: dark) { mark { background:#5c4a12; color:#fff; } }
-  .result .where { font-size:13px; color:var(--muted); margin-bottom:4px; }
-  .result .where a { color:inherit; }
-  .note.quote { border-color:var(--good); font-style:italic; }
-  .tpara { margin:0 0 14px; } .tpara .ts { font-style:normal; }
-  .inline-notes { margin:-6px 0 16px 14px; }
-  .answer sup a { color:var(--accent); text-decoration:none; font-weight:600; font-size:12px; }
-  .sources { margin-top:14px; padding-top:10px; border-top:1px solid var(--line); font-size:14px; }
-  .sources div { margin:4px 0; }
-  button.mini { font-size:12px; padding:2px 8px; margin-left:4px; vertical-align:1px; }
-  .qa { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:10px 0; }
-  .qa .q { font-weight:600; margin-bottom:8px; }
-  .qa textarea { width:100%; font:inherit; font-size:15px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); resize:vertical; }
-  .qa textarea:focus { outline:none; border-color:var(--accent); }
-  .row-l { display:flex; gap:10px; align-items:center; margin-top:6px; flex-wrap:wrap; }
-  .attempt { margin:6px 0 10px; } .attempt .mine { white-space:pre-wrap; margin:4px 0 6px; padding:6px 10px; background:var(--bg); border-radius:8px; }
-  .attempt .feedback { border-left:3px solid var(--good); padding-left:10px; font-size:15px; }
-  .attempt .del-answer { color:var(--muted); margin-left:6px; }
-</style>
-</head>
-<body>
-<header>
-  <button id="back" hidden aria-label="Back">←</button>
-  <h1 id="title" title="Back to all lessons" style="cursor:pointer">Study Notes</h1>
-  <button id="reviewBtn" class="primary">Review <span id="dueCount"></span></button>
-</header>
-<main id="app"></main>
-<script>
-const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const fmt = (t) => { if (t == null) return ""; t = Math.floor(t); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0"); };
-const api = (p, o = {}) => fetch(p, { headers: { "Content-Type": "application/json" }, ...o })
-  .then((r) => r.ok ? r.json() : r.json().catch(() => ({})).then((e) => Promise.reject(new Error(e.detail || r.statusText))));
-const jump = (url, t) => `${esc(url)}#sn_t=${Math.floor(t)}`;
-
-function mdInline(s, url) {
-  return esc(s)
-    .replace(/\[((?:\d+:)?\d+:\d{2})\]/g, (m, t) => url ? `<a class="ts" href="${jump(url, t.split(":").reduce((a, x) => a * 60 + +x, 0))}" target="_blank">${t}</a>` : m).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s).,:;!?]|$)/g, "$1<i>$2</i>");
-}
-
-function md(src, url) {
-  const inline = (s) => mdInline(s, url);
-  let html = "", inList = false;
-  for (const line of String(src || "").split("\n")) {
-    const li = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/), h = line.match(/^#{1,6}\s+(.*)/);
-    if (!li && inList) { html += "</ul>"; inList = false; }
-    if (h) html += `<h3>${inline(h[1])}</h3>`;
-    else if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(li[1])}</li>`; }
-    else if (line.trim()) html += `<p>${inline(line)}</p>`;
-  }
-  return html + (inList ? "</ul>" : "");
-}
-
-function searchForm(q = "") {
-  return `<form class="search" id="searchForm">
-      <input id="q" type="search" placeholder="Search notes & transcripts, or ask a question" value="${esc(q)}" autocomplete="off">
-      <button type="submit">Search</button><button type="button" class="primary" id="askGo">✨ Ask</button>
-    </form>`;
-}
-function wireSearch() {
-  const go = (kind) => { const q = $("#q").value.trim(); if (q) location.hash = `#${kind}/${encodeURIComponent(q)}`; };
-  $("#searchForm").onsubmit = (e) => { e.preventDefault(); go("search"); };
-  $("#askGo").onclick = () => go("ask");
-}
-const mark = (snip) => esc(snip).replace(/\u0002/g, "<mark>").replace(/\u0003/g, "</mark>");
-
-async function searchPage(q) {
-  $("#back").hidden = false; $("#title").textContent = "Search";
-  $("#app").innerHTML = searchForm(q) + (q ? `<div class="empty">Searching…</div>` : `<div class="hint">Search finds words in every saved transcript and your notes. Ask has the Jetson answer from them, with sources.</div>`);
-  wireSearch();
-  if (!q) return $("#q").focus();
-  const { results } = await api(`/api/search?q=${encodeURIComponent(q)}`);
-  $("#app").innerHTML = searchForm(q) + `<div class="hint">${results.length} match${results.length === 1 ? "" : "es"}</div>` +
-    (results.map((r) => `<div class="card result">
-      <div class="where"><a href="#lesson/${r.lesson_id}/${r.kind === "note" ? "notes" : "transcript"}"><b>${esc(r.title)}</b></a>${r.module ? ` · ${esc(r.module)}` : ""}
-        ${r.t != null ? ` · <a class="ts" href="${jump(r.url_key, r.t)}" target="_blank" title="Watch from here">${fmt(r.t)}</a>` : ""}${r.kind === "note" ? " · my note" : ""}</div>
-      <div>${mark(r.snip)}</div></div>`).join("") || `<div class="empty">Nothing found.</div>`);
-  wireSearch();
-}
-
-async function askPage(q) {
-  $("#back").hidden = false; $("#title").textContent = "Ask";
-  $("#app").innerHTML = searchForm(q) + `<div class="card"><div class="muted">✨ Looking through your lessons and asking the Jetson… (about 10 s)</div></div>`;
-  wireSearch();
-  try {
-    const { answer, sources } = await api("/api/ask", { method: "POST", body: JSON.stringify({ q }) });
-    const cited = new Set([...answer.matchAll(/\[(\d+)\]/g)].map((m) => +m[1]));
-    const srcList = (list, label, fold) => !list.length ? "" : `<${fold ? "details" : "div"} class="sources">${fold ? `<summary class="muted">${label} (${list.length})</summary>` : `<div class="muted">${label}</div>`}
-      ${list.map((src) => `<div id="src-${src.n}">[${src.n}] <a href="#lesson/${src.lesson_id}/${src.kind === "note" ? "notes" : "transcript"}">${esc(src.title)}</a>
-        ${src.t != null ? `<a class="ts" href="${jump(src.url_key, src.t)}" target="_blank">${fmt(src.t)}</a>` : ""}${src.kind === "note" ? ` <span class="muted">my note</span>` : ""}</div>`).join("")}</${fold ? "details" : "div"}>`;
-    const cite = (html) => html.replace(/\[(\d+)\]/g, (m, n) => sources[n - 1] ? `<sup><a href="#" onclick="document.getElementById('src-${n}').scrollIntoView({ behavior: 'smooth', block: 'center' }); return false">[${n}]</a></sup>` : m);
-    $("#app").innerHTML = searchForm(q) + `<div class="card"><div class="md answer">${cite(md(answer))}</div>
-      ${srcList(sources.filter((x) => cited.has(x.n)), "Sources")}
-      ${srcList(sources.filter((x) => !cited.has(x.n)), "More related passages", true)}</div>`;
-  } catch (e) {
-    $("#app").innerHTML = searchForm(q) + `<div class="card err">⚠ ${esc(e.message)}</div>`;
-  }
-  wireSearch();
-}
-
-const plain = (s) => String(s || "").replace(/\*\*|`/g, "").replace(/\s+/g, " ").trim().toLowerCase();
-const tsOf = (s) => { const m = String(s).match(/\[((?:\d+:)?\d+:\d{2})\]/); return m ? m[1].split(":").reduce((a, x) => a * 60 + +x, 0) : null; };
-
-/** Study notes, with "＋ Add to my notes" on missed points and an answer box under each question. */
-function renderStudy(l) {
-  const sections = l.study_notes.split(/^###\s+/m).filter((x) => x.trim());
-  const have = new Set(l.notes.map((n) => plain(n.text)));
-  const items = (body) => body.split("\n").map((ln) => ln.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/)?.[1]).filter(Boolean);
-  return sections.map((sec) => {
-    const nl = sec.indexOf("\n");
-    const title = (nl < 0 ? sec : sec.slice(0, nl)).trim(), body = nl < 0 ? "" : sec.slice(nl + 1);
-    if (/missed/i.test(title)) {
-      return `<h3>${esc(title)}</h3><ul>${items(body).map((it) => {
-        const text = it.replace(/^\s*\[(?:\d+:)?\d+:\d{2}\]\s*/, "").replace(/\*\*/g, "").trim();
-        const added = have.has(plain(text));
-        return `<li>${mdInline(it, l.url_key)} ${added ? `<span class="muted">✓ in my notes</span>`
-          : `<button class="mini add-missed" data-t="${tsOf(it) ?? ""}" data-text="${esc(text)}">＋ Add to my notes</button>`}</li>`;
-      }).join("")}</ul>`;
-    }
-    if (/question/i.test(title)) {
-      return `<h3>${esc(title)}</h3>${items(body).map((q, i) => {
-        const prev = l.answers.filter((a) => plain(a.question) === plain(q));
-        return `<div class="qa" data-q="${esc(q)}"><div class="q">${mdInline(q, l.url_key)}</div>
-          ${prev.map((a) => `<div class="attempt"><div class="muted">My answer · ${new Date(a.created * 1000).toLocaleDateString()}
-              <a href="#" class="del-answer" data-id="${a.id}">delete</a></div><div class="mine">${esc(a.answer)}</div>
-            <div class="md feedback">${md(a.feedback, l.url_key)}</div></div>`).join("")}
-          <div class="answer-box" ${prev.length ? "hidden" : ""}><textarea rows="3" placeholder="Your answer… (the Jetson will check it against the lecture)"></textarea>
-            <div class="row-l"><button class="primary check-answer">Check my answer</button><span class="muted state"></span></div></div>
-          ${prev.length ? `<button class="mini try-again">Answer again</button>` : ""}</div>`;
-      }).join("")}`;
-    }
-    return md(`### ${sec}`, l.url_key);
-  }).join("");
-}
-
-function wireStudy(l, id) {
-  document.querySelectorAll(".add-missed").forEach((b) => b.onclick = async () => {
-    b.disabled = true;
-    const t = b.dataset.t === "" ? null : +b.dataset.t;
-    await api("/api/notes", { method: "POST", body: JSON.stringify({
-      lesson: { url: l.url_key, title: l.title, course: l.course?.title || "", course_slug: l.course?.slug || "", module: l.module || "" },
-      t, kind: "text", text: b.dataset.text }) });
-    b.outerHTML = `<span class="muted">✓ in my notes</span>`;
-  });
-  document.querySelectorAll(".try-again").forEach((b) => b.onclick = () => {
-    b.hidden = true;
-    const box = b.closest(".qa").querySelector(".answer-box");
-    box.hidden = false;
-    box.querySelector("textarea").focus();
-  });
-  document.querySelectorAll(".check-answer").forEach((b) => b.onclick = async () => {
-    const qa = b.closest(".qa"), ta = qa.querySelector("textarea"), st = qa.querySelector(".state");
-    if (!ta.value.trim()) return ta.focus();
-    b.disabled = true; st.textContent = "✨ Checking against the lecture… (about 10–20 s)";
-    try {
-      await api(`/api/lessons/${id}/answers`, { method: "POST", body: JSON.stringify({ question: qa.dataset.q, answer: ta.value }) });
-      lesson(id, "study");
-    } catch (e) { st.innerHTML = `<span class="err">⚠ ${esc(e.message)}</span>`; b.disabled = false; }
-  });
-  document.querySelectorAll(".del-answer").forEach((a) => a.onclick = async (e) => {
-    e.preventDefault();
-    if (!confirm("Delete this answer?")) return;
-    await api(`/api/answers/${a.dataset.id}`, { method: "DELETE" });
-    lesson(id, "study");
-  });
-}
-
-async function updateDue() {
-  const { cards } = await api("/api/cards/due?limit=200").catch(() => ({ cards: [] }));
-  $("#dueCount").innerHTML = cards.length ? `<span class="badge">${cards.length}</span>` : "";
-}
-
-async function home() {
-  $("#back").hidden = true; $("#title").textContent = "Study Notes";
-  const courses = await api("/api/courses");
-  if (!courses.length) { $("#app").innerHTML = `<div class="empty">No lessons yet. Open a lesson video with the Chrome extension installed.</div>`; return; }
-  $("#app").innerHTML = searchForm() + courses.map((c) => `
-    <h2>${esc(c.title)}</h2>
-    ${c.lessons.map((l) => `
-      <a class="card lesson" href="#lesson/${l.id}">
-        <div><b>${esc(l.title)}</b></div>
-        <div class="meta">${[l.module, l.note_count ? `${l.note_count} notes` : l.has_transcript ? "📜 transcript only" : "no notes", l.card_count ? `${l.card_count} cards` : "", l.processed ? "✓ processed" : "", new Date(l.updated * 1000).toLocaleDateString()].filter(Boolean).join(" · ")}</div>
-      </a>`).join("")}`).join("");
-  wireSearch();
-}
-
-async function lesson(id, tab) {
-  $("#back").hidden = false;
-  const l = await api("/api/lessons/" + id);
-  tab ||= l.study_notes ? "study" : l.notes.length || !l.has_transcript ? "notes" : "transcript";
-  $("#title").textContent = l.title;
-  const ts = (t) => t == null ? "" : `<a class="ts" href="${jump(l.url_key, t)}" target="_blank" title="Watch from here">${fmt(t)}</a>`;
-  const noteHtml = (n) => {
-    const img = n.drawing || n.image;
-    const icon = { bookmark: "⭐ ", shot: "📷 ", sketch: "🖊 ", quote: "💬 " }[n.kind] || "";
-    return `<div class="note ${n.kind}">${ts(n.t)}${icon}${esc(n.text)}
-      ${img ? `<a href="/draw/?note=${n.id}" target="_blank"><img src="/files/${img}" loading="lazy" alt=""></a>` : ""}
-      ${n.kind === "shot" || n.kind === "sketch" ? `<div class="tools"><a href="/draw/?note=${n.id}" target="_blank">✏️ ${n.has_drawing ? "edit drawing" : "draw"}</a></div>` : ""}</div>`;
-  };
-  const job = l.job && ["queued", "running"].includes(l.job.status);
-  let transcriptHtml = "";
-  if (tab === "transcript") {
-    const { paragraphs } = await api(`/api/lessons/${id}/transcript`);
-    const timed = l.notes.filter((n) => n.t != null);
-    transcriptHtml = paragraphs.length ? paragraphs.map((p, i) => {
-      const end = paragraphs[i + 1]?.t ?? Infinity;
-      const here = timed.filter((n) => n.t >= (i ? p.t : -Infinity) && n.t < end);
-      return `<p class="tpara">${ts(p.t)}${esc(p.text)}</p>${here.length ? `<div class="inline-notes">${here.map(noteHtml).join("")}</div>` : ""}`;
-    }).join("") + l.notes.filter((n) => n.t == null).map(noteHtml).join("")
-      : `<div class="empty">No transcript saved for this lesson.</div>`;
-  }
-  const body = {
-    transcript: transcriptHtml,
-    notes: l.notes.length ? l.notes.map(noteHtml).join("") : `<div class="empty">No notes.</div>`,
-    study: l.study_notes ? `<div class="md">${renderStudy(l)}</div>
-        <div class="muted" style="margin-top:14px">Generated by ${esc(l.study_meta.model || "LLM")} · ${l.study_meta.at ? new Date(l.study_meta.at * 1000).toLocaleString() : ""}</div>`
-      : `<div class="empty">Not processed yet.</div>`,
-    cards: l.cards.length ? l.cards.map((k) => `<div class="note">${ts(k.t)}<b>${esc(k.q)}</b><div class="muted">${esc(k.a)}</div></div>`).join("")
-      : `<div class="empty">No flashcards yet.</div>`,
-  }[tab];
-  $("#app").innerHTML = `
-    <div class="tabs">
-      ${["study", "notes", "transcript", "cards"].filter((t) => t !== "transcript" || l.has_transcript).map((t) => `<button data-t="${t}" class="${t === tab ? "on" : ""}">${{ notes: `My notes (${l.notes.length})`, study: "Study notes", transcript: "Transcript", cards: `Flashcards (${l.cards.length})` }[t]}</button>`).join("")}
+<html lang="en" data-theme="system" data-reading="standard">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#30664e" />
+    <meta
+      name="description"
+      content="Your course notes, transcripts, drawings, and daily review in one quiet study space."
+    />
+    <title>Study Notes</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/assets/favicon-32.png"
+    />
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+    <link rel="manifest" href="/assets/site.webmanifest" />
+    <script>
+      try {
+        const p = JSON.parse(localStorage.getItem("sn-preferences") || "{}");
+        document.documentElement.dataset.theme = p.theme || "system";
+        document.documentElement.dataset.reading = p.reading || "standard";
+      } catch {}
+    </script>
+    <link rel="stylesheet" href="/assets/app.css?v=1" />
+    <script type="module" src="/assets/app.js?v=1"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="app-shell">
+      <aside id="sidebar" class="sidebar" aria-label="Main navigation">
+        <a href="#" class="brand"
+          ><span class="brand-mark"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#book"></use></svg></span
+          >study notes</a
+        >
+        <nav class="primary-nav" aria-label="Workspace">
+          <a href="#" data-nav="overview"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#home"></use></svg
+            >Overview</a
+          >
+          <a href="#library" data-nav="library"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#library"></use></svg
+            >Library<span id="library-count" class="count" hidden></span
+          ></a>
+          <a href="#review" data-nav="review"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#layers"></use></svg
+            >Review<span data-due-count class="count" hidden></span
+          ></a>
+          <a href="#ask" data-nav="ask"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#sparkles"></use></svg
+            >Ask your notes</a
+          >
+        </nav>
+        <div class="course-nav">
+          <div class="eyebrow">Your courses</div>
+          <nav id="course-navigation" aria-label="Courses">
+            <p class="small muted">Loading your library…</p>
+          </nav>
+        </div>
+        <div class="sidebar-footer">
+          <p>A space to understand,<br />and remember.</p>
+          <button class="text-button" data-action="preferences">
+            <svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#sun"></use></svg
+            >Reading & appearance
+          </button>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <button
+            id="menu-toggle"
+            class="icon-button menu-toggle"
+            data-action="menu"
+            aria-label="Open course navigation"
+            aria-controls="sidebar"
+            aria-expanded="false"
+          >
+            <svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#menu"></use>
+            </svg>
+          </button>
+          <nav id="breadcrumbs" class="breadcrumbs" aria-label="Breadcrumb">
+            <a href="#">Study space</a>
+          </nav>
+          <div class="topbar-actions">
+            <a
+              class="icon-button"
+              href="#search"
+              aria-label="Search your library"
+              ><svg class="icon" aria-hidden="true">
+                <use href="/assets/icons.svg#search"></use></svg></a
+            ><button
+              class="icon-button"
+              data-action="preferences"
+              aria-label="Reading and appearance settings"
+            >
+              <svg class="icon" aria-hidden="true">
+                <use href="/assets/icons.svg#sun"></use>
+              </svg>
+            </button>
+          </div>
+        </header>
+        <main id="main" tabindex="-1">
+          <div class="loading" role="status">Opening your study space…</div>
+        </main>
+        <nav class="mobile-nav" aria-label="Workspace">
+          <a href="#" data-nav="overview"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#home"></use></svg
+            >Home</a
+          ><a href="#library" data-nav="library"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#library"></use></svg
+            >Library</a
+          ><a href="#review" data-nav="review"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#layers"></use></svg
+            >Review<span data-due-count class="mobile-count" hidden></span></a
+          ><a href="#ask" data-nav="ask"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/assets/icons.svg#sparkles"></use></svg
+            >Ask</a
+          >
+        </nav>
+      </div>
     </div>
-    <div class="card">${body}</div>
-    <div class="tabs">
-      <button id="proc" ${job ? "disabled" : ""}>${job ? "✨ Processing…" : l.study_notes ? "✨ Re-process" : "✨ Process"}</button>
-      ${l.cards.length ? `<button id="revLesson">Review this lesson</button>` : ""}
-      <a class="btn" href="/api/lessons/${id}/export.md" target="_blank">Export .md</a>
-      <a class="btn" href="${esc(l.url_key)}" target="_blank">Open lesson ↗</a>
-      <span id="procState" class="muted">${l.job?.status === "error" ? `<span class="err">⚠ ${esc(l.job.error)}</span>` : job ? esc(l.job.step) : ""}</span>
-    </div>`;
-  document.querySelectorAll(".tabs [data-t]").forEach((b) => b.onclick = () => location.replace(`#lesson/${id}/${b.dataset.t}`));
-  $("#revLesson")?.addEventListener("click", () => (location.hash = `#review/${id}`));
-  if (tab === "study" && l.study_notes) wireStudy(l, id);
-  $("#proc").onclick = async () => {
-    try { await api(`/api/lessons/${id}/process`, { method: "POST" }); lesson(id, tab); }
-    catch (e) { $("#procState").innerHTML = `<span class="err">⚠ ${esc(e.message)}</span>`; }
-  };
-  if (job) setTimeout(() => location.hash.startsWith(`#lesson/${id}`) && lesson(id, tab), 3000);
-}
-
-async function review(lessonId) {
-  $("#back").hidden = false; $("#title").textContent = "Review";
-  const { cards, total } = await api(`/api/cards/due?limit=50${lessonId ? `&lesson_id=${lessonId}` : ""}`);
-  let i = 0, right = 0;
-  const show = () => {
-    if (i >= cards.length) {
-      $("#app").innerHTML = `<div class="empty">${!total ? "No flashcards yet. Process a lesson first." : cards.length ? `Done: ${right}/${cards.length} correct 🎉` : "All caught up 🎉 Nothing due right now."}</div>`;
-      updateDue();
-      return;
-    }
-    const k = cards[i];
-    $("#app").innerHTML = `<div class="muted">${i + 1} / ${cards.length} · ${esc(k.lesson_title)}</div>
-      <div class="card flash"><div>${esc(k.q)}</div><div class="a" hidden>${esc(k.a)}
-        ${k.t != null ? `<div style="margin-top:10px"><a class="ts" href="${jump(k.url_key, k.t)}" target="_blank">watch at ${fmt(k.t)}</a></div>` : ""}</div>
-      <div class="row" id="ctl"><button class="primary" id="show">Show answer</button></div></div>`;
-    $("#show").onclick = () => {
-      $(".flash .a").hidden = false;
-      $("#ctl").innerHTML = `<button class="bad" id="no">Didn't know</button><button class="good" id="yes">Knew it</button>`;
-      const grade = (correct) => api(`/api/cards/${k.id}/review`, { method: "POST", body: JSON.stringify({ correct }) })
-        .then(() => { right += correct; i++; show(); });
-      $("#no").onclick = () => grade(false); $("#yes").onclick = () => grade(true);
-    };
-  };
-  show();
-}
-
-function route() {
-  const h = location.hash;
-  const m = h.match(/^#lesson\/(\d+)(?:\/(\w+))?/), sm = h.match(/^#(search|ask)(?:\/(.*))?$/);
-  const q = sm ? decodeURIComponent(sm[2] || "") : "";
-  const rm = h.match(/^#review(?:\/(\d+))?$/);
-  const p = m ? lesson(m[1], m[2]) : rm ? review(rm[1]) : sm ? (sm[1] === "ask" && q ? askPage(q) : searchPage(q)) : home();
-  p.catch((e) => $("#app").innerHTML = `<div class="empty err">⚠ ${esc(e.message)}</div>`);
-  window.scrollTo(0, 0);
-}
-// ← goes up one level (lesson → list, reviewing a lesson → that lesson), not back through every click.
-function parentOf(h) {
-  const rv = h.match(/^#review\/(\d+)/);
-  return rv ? `#lesson/${rv[1]}` : "";
-}
-$("#back").onclick = () => location.replace(parentOf(location.hash) || "#");
-$("#title").onclick = () => location.replace("#");
-$("#reviewBtn").onclick = () => location.hash === "#review" ? route() : (location.hash = "review");
-window.addEventListener("hashchange", route);
-route();
-updateDue();
-</script>
-</body>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <div class="dialog-header">
+        <h2 id="dialog-title"></h2>
+        <button
+          class="icon-button"
+          data-action="close-dialog"
+          aria-label="Close dialog"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/assets/icons.svg#close"></use>
+          </svg>
+        </button>
+      </div>
+      <div id="dialog-content"></div>
+    </dialog>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
+    <noscript
+      >This study space needs JavaScript. Your Markdown exports remain available
+      through the server.</noscript
+    >
+  </body>
 </html>

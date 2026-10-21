@@ -65,7 +65,14 @@ Open `http://192.168.3.20:8765` to:
 - read each lesson's **Transcript** with your notes and drawings placed where you took them
 - edit drawings and review flashcards (spaced repetition)
 
-Timestamps everywhere open the lesson video at that point.
+Video links open the lesson at the selected moment.
+
+The review workspace includes course/module navigation, a resume-reading overview, scoped
+search, and short flashcard sessions with real next-review intervals and undo. Study-note
+timestamps reveal the source passage; you can then read it in the transcript or open the
+video. Captures open in a zoomable preview, with a separate action to edit their drawings.
+Paper, Evening, and System appearances and a comfortable reading size are available in
+**Reading & appearance**. Reading positions and answer drafts are saved in that browser.
 
 ## Data
 
@@ -89,3 +96,13 @@ The editor is in `draw/` (`npm run build` writes to `server/static/draw/`).
 
 On the Pi: `systemctl --user status study-notes` · logs: `journalctl --user -u study-notes -f`.
 LLM settings: `~/.config/study-notes.env` (`LLM_URL`, `LLM_MODEL`).
+
+The review UI is plain HTML, CSS, and JavaScript in `server/static/ui/`, with locally served
+SVG icons and favicons. Design and behavior: [docs/UI_DESIGN.md](docs/UI_DESIGN.md).
+
+API checks (use an isolated temporary database automatically):
+
+```bash
+python3 -m pip install -r server/requirements-dev.txt
+python3 -m unittest discover -s tests -v
+```
