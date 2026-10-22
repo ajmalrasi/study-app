@@ -130,3 +130,16 @@ API checks (use an isolated temporary database automatically):
 python3 -m pip install -r server/requirements-dev.txt
 python3 -m unittest discover -s tests -v
 ```
+
+### Generate a whole course
+
+In Library, each course has **Generate all · N** for saved lessons with notes or a
+transcript that still need study material. It queues summaries and flashcards using
+the existing one-at-a-time worker. Completed lessons and active jobs are skipped;
+failed unprocessed lessons can be retried. Repeated clicks do not duplicate jobs.
+You can leave the page while generation runs. Use **Refresh** beside the generating
+count to update statuses.
+
+Validation: 12 API tests, including course scoping, skipping completed/active/empty/
+draft-only lessons, failed-job retry and concurrent duplicate submissions. Live
+browser verification confirmed the course button and eligible count.

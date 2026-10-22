@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -44,6 +45,35 @@ class ReviewUIAPI(unittest.TestCase):
                       (self.other["id"], "Other question", "Other answer", 0, 10, 1))
             c.execute("INSERT INTO cards (lesson_id,q,a,box,due,created) VALUES (?,?,?,?,?,?)",
                       (self.lesson["id"], "Future question", "Later", 0, 9000000000, 1))
+
+    def test_generate_course_only_queues_eligible_lessons_and_retries_safely(self):
+        course_id = self.lesson["course"]["id"]
+        with self.module.db() as c:
+            c.execute("UPDATE lessons SET transcript='saved transcript' WHERE id IN (?,?)",
+                      (self.lesson["id"], self.other["id"]))
+            ids = {}
+            for kind in ("processed", "active", "empty", "draft", "notes", "failed"):
+                ids[kind] = c.execute("INSERT INTO lessons (course_id,url_key,title,transcript,study_notes) VALUES (?,?,?,?,?)",
+                    (course_id, "https://example.com/" + kind, kind,
+                     "source" if kind in ("processed", "active", "failed") else "",
+                     "existing material" if kind == "processed" else "")).lastrowid
+            c.execute("INSERT INTO jobs (lesson_id,status) VALUES (?,'running')", (ids["active"],))
+            c.execute("INSERT INTO jobs (lesson_id,status) VALUES (?,'error')", (ids["failed"],))
+            for kind in ("notes", "draft"):
+                c.execute("INSERT INTO notes (id,lesson_id,kind,text,draft) VALUES (?,?,?,?,?)",
+                          (kind, ids[kind], "text", "personal note", int(kind == "draft")))
+        with patch.object(self.module._job_wakeup, "set"):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                responses = list(pool.map(lambda _: self.client.post(f"/api/courses/{course_id}/process"), range(2)))
+            self.assertTrue(all(r.status_code == 200 for r in responses))
+            self.assertEqual(sum(r.json()["queued"] for r in responses), 3)
+            queued = {i for r in responses for i in r.json()["lesson_ids"]}
+            self.assertEqual(queued, {self.lesson["id"], ids["notes"], ids["failed"]})
+            self.assertEqual(self.client.post(f"/api/courses/{course_id}/process").json()["queued"], 0)
+            self.assertEqual(self.client.post("/api/courses/999999/process").status_code, 404)
+        with self.module.db() as c:
+            self.assertEqual(c.execute("SELECT study_notes FROM lessons WHERE id=?", (ids["processed"],)).fetchone()[0], "existing material")
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM jobs WHERE lesson_id=?", (self.other["id"],)).fetchone()[0], 0)
 
     def rate(self, request_id="one", version=0, correct=True):
         return self.client.post(f"/api/cards/{self.card}/review", json={

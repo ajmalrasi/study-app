@@ -689,6 +689,7 @@ threading.Thread(target=job_worker, daemon=True).start()
 @app.post("/api/lessons/{lesson_id}/process")
 def process_lesson(lesson_id: int):
     with db() as c:
+        c.execute("BEGIN IMMEDIATE")
         les = get_lesson(c, lesson_id)
         n = c.execute("SELECT COUNT(*) FROM notes WHERE lesson_id=? AND draft=0", (lesson_id,)).fetchone()[0]
         if not n and not les["transcript"]:
@@ -702,6 +703,32 @@ def process_lesson(lesson_id: int):
         job = dict(c.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
     _job_wakeup.set()
     return job
+
+
+@app.post("/api/courses/{course_id}/process")
+def process_course(course_id: int):
+    """Queue missing study material atomically; the existing worker runs serially."""
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        if not c.execute("SELECT id FROM courses WHERE id=?", (course_id,)).fetchone():
+            raise HTTPException(404, "course not found")
+        lessons = c.execute("""
+            SELECT l.id FROM lessons l
+            WHERE l.course_id=? AND l.study_notes=''
+              AND (l.transcript!='' OR EXISTS (
+                SELECT 1 FROM notes n WHERE n.lesson_id=l.id AND n.draft=0))
+              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.lesson_id=l.id
+                AND j.status IN ('queued','running'))
+            ORDER BY l.id
+        """, (course_id,)).fetchall()
+        now = time.time()
+        ids = [row["id"] for row in lessons]
+        for lesson_id in ids:
+            c.execute("INSERT INTO jobs (lesson_id,status,step,created) VALUES (?,'queued','waiting',?)",
+                      (lesson_id, now))
+    if ids:
+        _job_wakeup.set()
+    return {"queued": len(ids), "lesson_ids": ids}
 
 
 @app.get("/api/jobs/{job_id}")

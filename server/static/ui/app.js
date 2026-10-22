@@ -216,6 +216,7 @@ function setBreadcrumb(items) {
 function setPage(title, html) {
   document.title =
     title === "Overview" ? "Study Notes" : `${title} · Study Notes`;
+  $("#main").dataset.page = state.current?.page || "overview";
   $("#main").innerHTML = html;
 }
 function loading(label = "Opening your lesson…") {
@@ -296,7 +297,12 @@ function lessonRow(l) {
   const [label, ico, style] = status(l);
   return `<a class="lesson-row" href="${lessonHref(l.id, "auto")}"><span class="row-icon">${icon(l.processed ? "check-file" : "file")}</span><div class="row-copy"><div class="row-title">${esc(l.title)}</div><div class="row-meta">${count(l.note_count, "note")}${l.card_count ? " · " + count(l.card_count, "flashcard") : ""}${l.has_transcript ? " · Transcript saved" : ""}<span class="mobile-state"> · ${esc(label)}</span></div></div><span class="tag row-status ${style}">${icon(ico)}${label}</span>${icon("chevron").replace('class="icon"', 'class="icon row-arrow"')}</a>`;
 }
+function generationReady(l) {
+  return !l.processed && (l.has_transcript || l.note_count) && !["queued", "running"].includes(l.job_status);
+}
 function courseSection(c, { openModule = null } = {}) {
+  const readyCount = c.lessons.filter(generationReady).length;
+  const activeCount = c.lessons.filter(l => ["queued", "running"].includes(l.job_status)).length;
   const groups = new Map();
   c.lessons
     .filter((l) => state.filter !== "pending" || !l.processed)
@@ -306,7 +312,7 @@ function courseSection(c, { openModule = null } = {}) {
       groups.get(m).push(l);
     });
   if (!groups.size) return "";
-  return `<section class="course-section"><div class="course-heading"><div class="course-monogram" aria-hidden="true">${esc(c.title.slice(0, 1))}</div><div><h3>${esc(c.title)}</h3><p class="small muted">${c.lessons.some((l) => l.url_key.includes("deeplearning.ai")) ? "DeepLearning.AI · " : ""}${count(c.lessons.length, "saved lesson")}</p></div>${c.id ? `<button class="text-button" data-action="rename-course" data-course-id="${c.id}" aria-label="Rename ${esc(c.title)}">${icon("edit")}Rename course</button>` : ""}</div>${[
+  return `<section class="course-section" data-color="${courseIdentity(c)}"><div class="course-heading"><div class="course-monogram" data-color="${courseIdentity(c)}" aria-hidden="true">${icon(/aws|cloud/i.test(c.title) ? "layers" : "sparkles")}</div><div><h3>${esc(c.title)}</h3><p class="small muted">${c.lessons.some((l) => l.url_key.includes("deeplearning.ai")) ? "DeepLearning.AI · " : ""}${count(c.lessons.length, "saved lesson")}</p></div>${c.id ? `<div class="course-actions"><button class="button primary" data-action="generate-course" data-course-id="${c.id}" ${readyCount ? "" : "disabled"}>${icon("sparkles")}Generate all${readyCount ? " · " + readyCount : ""}</button>${activeCount ? `<span class="small muted" role="status">${activeCount} generating · <button class="text-button" data-action="retry-route">Refresh</button></span>` : ""}<button class="text-button" data-action="rename-course" data-course-id="${c.id}" aria-label="Rename ${esc(c.title)}">${icon("edit")}Rename course</button></div>` : ""}</div>${[
     ...groups,
   ]
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
@@ -329,6 +335,32 @@ function libraryContent(route, overview = false) {
     );
   return `<div class="section-heading"><h2>${overview ? "Your library" : "Saved lessons"}</h2>${overview ? '<a class="text-button" href="#library">Browse library ' + icon("external") + "</a>" : ""}</div><div class="filters" aria-label="Filter lessons"><button class="filter" data-action="filter" data-filter="all" aria-pressed="${state.filter === "all"}">All lessons</button><button class="filter" data-action="filter" data-filter="pending" aria-pressed="${state.filter === "pending"}">Needs study notes <span class="small">${pending}</span></button>${chosen ? '<a class="text-button" href="#library">All courses</a>' : ""}</div>${courses.map((c) => courseSection(c, { openModule: route.params.get("module") })).join("") || empty("Nothing here yet.", state.filter === "pending" ? "Your saved lessons already have study notes." : "Choose another course or save a lesson with the extension.")}`;
 }
+function courseIdentity(c) {
+  let hash = 0;
+  for (const char of c.slug || c.title) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  return Math.abs(hash) % 4;
+}
+function courseArt(c) {
+  const cloud = /aws|cloud|architect/i.test(c.title);
+  const context = /context|language|prompt/i.test(c.title);
+  const drawing = cloud
+    ? '<path d="M83 106c-28 0-28-37-3-41 5-31 51-37 65-9 27-8 44 8 40 28 28 1 27 32 4 32H83"/><path d="M102 134v20m35-20v34m35-34v20M89 155h26m9 14h26m9-14h26"/>'
+    : context
+      ? '<rect x="60" y="48" width="130" height="85" rx="14"/><path d="M84 74h79M84 89h60m-60 15h42m64-2h24v65l-23-15h-62v-19M87 133l-13 17v-17"/>'
+      : '<rect x="113" y="78" width="48" height="48" rx="12"/><circle cx="77" cy="56" r="15"/><circle cx="197" cy="56" r="15"/><circle cx="77" cy="155" r="15"/><circle cx="197" cy="155" r="15"/><path d="M90 66l25 20m44 0 26-20m-95 80 25-26m44 0 26 26M126 102h22m-11-11v22"/>';
+  return `<svg class="course-illustration" viewBox="0 0 275 200" fill="none" aria-hidden="true"><circle cx="137" cy="102" r="76" fill="currentColor" opacity=".08"/><g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${drawing}<path d="M40 88v12m-6-6h12m185 34v12m-6-6h12" opacity=".5"/></g><circle cx="215" cy="32" r="4" fill="currentColor" opacity=".45"/></svg>`;
+}
+function homeCourses() {
+  return `<div class="section-heading"><div><div class="eyebrow">Follow your curiosity</div><h2>Your learning shelf</h2></div><a class="text-button" href="#library">All saved lessons ${icon("arrow")}</a></div><div class="course-shelf">${state.courses.map((c, i) => {
+    const ready = c.lessons.filter(l => l.processed).length;
+    return `<a class="shelf-card" data-color="${courseIdentity(c)}" href="${esc(courseUrl(c))}"><div class="shelf-art" aria-hidden="true"><span>${String(i + 1).padStart(2, "0")}</span>${courseArt(c)}<i></i></div><div class="shelf-copy"><p class="eyebrow">${count(c.lessons.length, "saved lesson")}</p><h3>${esc(c.title)}</h3><p class="small muted">${ready ? count(ready, "lesson") + " with study notes" : "Your next idea is waiting"}</p><span class="shelf-link">Explore course ${icon("arrow")}</span></div></a>`;
+  }).join("")}</div>`;
+}
+function welcome() {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  return `<section class="welcome"><div class="welcome-copy"><div class="eyebrow">${greeting} · Your space to grow</div><h1>Make room for<br><em>a little discovery.</em></h1><p>You don’t have to learn it all today.<br>Start with one idea that interests you.</p><a class="text-button" href="#library">Find something to explore ${icon("arrow")}</a></div><svg class="desk-art" viewBox="0 0 400 270" fill="none" aria-hidden="true"><circle cx="216" cy="126" r="112" fill="#edcb85"/><path d="M55 235H362" stroke="#355b48" stroke-width="3" stroke-linecap="round"/><path d="M104 211l100-29 110 29-101 29z" fill="#577b68"/><path d="M104 200l100-29 110 29-101 29z" fill="#fef6df" stroke="#355b48" stroke-width="2"/><path d="M105 189l99-28 110 28-101 29z" fill="#de8263" stroke="#355b48" stroke-width="2"/><path d="M133 159c32-13 55-9 79 3 25-20 51-26 78-21v56c-29-5-51 2-78 20-25-14-51-17-79-7z" fill="#fff9e9" stroke="#355b48" stroke-width="2"/><path d="M212 162v54m-62-43c17-3 30-1 45 5m-45 7c17-3 30-1 45 5m33-17c15-9 28-13 46-14m-46 27c15-9 28-13 46-14" stroke="#9eac8a" stroke-width="2"/><path d="M318 175v-57m0 33c-30 0-40-20-34-35 25 0 35 14 34 35m0-14c24-4 34-22 28-37-24 4-31 20-28 37" fill="#577b68" stroke="#355b48" stroke-width="2"/><path d="M296 173h43l-7 42h-29z" fill="#d88867" stroke="#355b48" stroke-width="2"/><path d="M72 180h35v28c0 18-35 18-35 0z" fill="#f6e6b9" stroke="#355b48" stroke-width="2"/><path d="M108 185c25-3 23 24 0 22M81 165c-8-10 8-13 0-24m15 24c-8-10 8-13 0-24" stroke="#355b48" stroke-width="2" stroke-linecap="round"/><path d="M117 82v16m-8-8h16m161-30v16m-8-8h16M70 124h8m-4-4v8" stroke="#b66a48" stroke-width="3" stroke-linecap="round"/></svg></section>`;
+}
 async function home(route, epoch) {
   setBreadcrumb([[route.page === "library" ? "Library" : "Overview"]]);
   await refreshLibrary(state.controller.signal);
@@ -337,14 +369,14 @@ async function home(route, epoch) {
   if (!state.courses.length) {
     setPage(
       "Overview",
-      `<div class="intro"><div class="eyebrow">Your study space</div><h1>A place for what you learn.</h1></div>${empty("Your first lesson starts here.", "Open a course video with the Study Notes extension installed.<br>Your notes, transcript, and captures will appear here.", '<a class="button primary" href="https://learn.deeplearning.ai/" target="_blank" rel="noopener noreferrer">Open DeepLearning.AI ' + icon("external") + "</a>")}`,
+      `${welcome()}${empty("Your first lesson starts here.", "Open a course video with the Study Notes extension installed.<br>Your notes, transcript, and captures will appear here.", '<a class="button primary" href="https://learn.deeplearning.ai/" target="_blank" rel="noopener noreferrer">Open DeepLearning.AI ' + icon("external") + "</a>")}`,
     );
     return;
   }
   if (route.page === "library") {
     setPage(
       "Library",
-      `<div class="intro"><div class="eyebrow">Your collection</div><h1>Your saved lessons.</h1><p>Browse your notes and study material, grouped by course and module.</p></div>${libraryContent(route)}`,
+      `<div class="intro illustrated-intro library-intro"><span class="intro-symbol" aria-hidden="true">${icon("book")}</span><div class="eyebrow">A collection of discoveries</div><h1>Good ideas live here.</h1><p>Your notes, sketches, and lessons. Ready whenever curiosity calls.</p></div>${libraryContent(route)}`,
     );
     const module = route.params.get("module");
     if (module)
@@ -368,7 +400,7 @@ async function home(route, epoch) {
     isLast = resume.id === last?.id;
   setPage(
     "Overview",
-    `<div class="intro"><div class="eyebrow">Your study space</div><h1>Pick up where you left off.</h1><p>A little review. A clearer understanding.</p></div><div class="home-features"><section class="resume"><div class="eyebrow">${isLast ? "Continue reading" : "Recently updated"}</div><h2>${esc(resume.title)}</h2><p class="small muted">${esc(resume.course.title)}${resume.module ? " · " + esc(resume.module) : ""}</p><a class="button primary" href="${lessonHref(resume.id, isLast ? last.tab : "auto")}">${isLast ? "Continue reading" : "Open lesson"}${icon("arrow")}</a></section><section class="due-panel">${state.summary ? `<div class="flex" style="gap:15px"><span class="due-number">${state.summary.due}</span><span>${state.summary.due ? "cards ready" : "cards due"}<br><span class="small muted">${state.summary.due ? "for a little practice" : "All caught up"}</span></span></div><p class="small muted">${state.summary.due ? "Start with a short session." : "Your next review will be ready when it’s due."}</p><a class="button primary" href="#review">${state.summary.due ? "Start a short review" : "Review overview"}${icon("arrow")}</a>` : `<h2>Review</h2><p class="small muted">We couldn’t load your due count.</p><button class="button" data-action="retry-route">${icon("refresh")}Try again</button>`}</section></div>${libraryContent(route, true)}`,
+    `${welcome()}<div class="section-heading next-heading"><h2>A small step for today</h2><span class="small muted">Choose where to begin</span></div><div class="home-features"><section class="resume"><span class="feature-icon" aria-hidden="true">${icon("book")}</span><div class="eyebrow">${isLast ? "Continue reading" : "Recently updated"}</div><h2>${esc(resume.title)}</h2><p class="small muted">${esc(resume.course.title)}${resume.module ? " · " + esc(resume.module) : ""}</p><a class="button primary" href="${lessonHref(resume.id, isLast ? last.tab : "auto")}">${isLast ? "Continue reading" : "Open lesson"}${icon("arrow")}</a></section><section class="due-panel"><div class="eyebrow">Keep it fresh</div>${state.summary ? `<div class="flex" style="gap:15px"><span class="due-number">${state.summary.due}</span><span>${state.summary.due ? "cards ready" : "cards due"}<br><span class="small muted">${state.summary.due ? "for a little practice" : "All caught up"}</span></span></div><p class="small muted">${state.summary.due ? "Start with a short session." : "Your next review will be ready when it’s due."}</p><a class="button primary" href="#review">${state.summary.due ? "Start a short review" : "Review overview"}${icon("arrow")}</a>` : `<h2>Review</h2><p class="small muted">We couldn’t load your due count.</p><button class="button" data-action="retry-route">${icon("refresh")}Try again</button>`}</section></div>${homeCourses()}`,
   );
 }
 function inline(s, url = null) {
@@ -785,6 +817,24 @@ async function pollJob(id, epoch) {
     }
   }
 }
+async function generateCourse(button) {
+  button.disabled = true;
+  button.textContent = "Queuing lessons…";
+  try {
+    const result = await api(`/api/courses/${Number(button.dataset.courseId)}/process`, { method: "POST" });
+    toast(result.queued ? `${count(result.queued, "lesson")} queued. Study notes and flashcards will generate one lesson at a time. You can leave this page.` : "No new lessons to queue. Ready lessons may already be generating.");
+    if (state.current.page === "library") {
+      const top = window.scrollY;
+      const epoch = state.epoch;
+      await home(state.current, epoch);
+      if (epoch === state.epoch) window.scrollTo({top, behavior: "instant"});
+    }
+  } catch (e) {
+    toast(e.message, true);
+    button.disabled = false;
+    button.innerHTML = icon("sparkles") + "Retry generate all";
+  }
+}
 async function processLesson() {
   const l = state.lesson;
   if (!l) return;
@@ -864,7 +914,7 @@ function renderReview() {
       ];
       if (!options.includes(r.size))
         r.size = options.find((n) => n >= 10) || options.at(-1);
-      html = `<div class="review-intro"><span class="tag">${count(due, "card")} due</span><h1>A little practice goes a long way.</h1><p class="muted">Recall an idea, reveal the answer, then decide how it went.</p></div><section class="review-setup"><div class="eyebrow">Choose a session</div><div class="review-options">${options.map((n) => `<button class="button" data-action="review-size" data-size="${n}" aria-pressed="${r.size === n}">${n === due ? "All " + n : n + " cards"}</button>`).join("")}</div><button class="button primary" data-action="start-review" ${r.busy ? "disabled" : ""}>${r.busy ? "Opening cards…" : "Start review"}${icon("arrow")}</button><p class="small muted">${esc(r.title)} · You can stop at any point.</p>${due > 500 ? '<p class="small muted">Up to 500 cards per session. Remaining cards stay due.</p>' : ""}</section>${r.error ? errorBox(r.error, "start-review") : ""}`;
+      html = `<div class="review-intro"><div class="review-emblem" aria-hidden="true">${icon("layers")}</div><span class="tag">${count(due, "card")} due</span><h1>A little practice goes a long way.</h1><p class="muted">Recall an idea, reveal the answer, then decide how it went.</p></div><section class="review-setup"><div class="eyebrow">Choose a session</div><div class="review-options">${options.map((n) => `<button class="button" data-action="review-size" data-size="${n}" aria-pressed="${r.size === n}">${n === due ? "All " + n : n + " cards"}</button>`).join("")}</div><button class="button primary" data-action="start-review" ${r.busy ? "disabled" : ""}>${r.busy ? "Opening cards…" : "Start review"}${icon("arrow")}</button><p class="small muted">${esc(r.title)} · You can stop at any point.</p>${due > 500 ? '<p class="small muted">Up to 500 cards per session. Remaining cards stay due.</p>' : ""}</section>${r.error ? errorBox(r.error, "start-review") : ""}`;
     }
   } else if (r.index >= r.cards.length) {
     const recalled = r.history.filter((h) => h.correct).length;
@@ -1077,7 +1127,7 @@ function askPage(route) {
     };
   setPage(
     "Ask your notes",
-    `<div class="intro"><div class="eyebrow">Ask your notes</div><h1>Connect the ideas.</h1><p>Answers grounded in your saved lessons, with sources you can inspect.</p></div><div class="ask-layout"><div><form id="ask-form" class="ask-box"><label class="field-label" for="ask-q">Your question</label><textarea id="ask-q" placeholder="What would you like to understand?" required>${esc(q)}</textarea><div class="flex between wrap"><div class="flex wrap"><label class="small muted" for="ask-course">Course</label><select class="select" id="ask-course">${scopeOptions(course)}</select></div><button class="button primary" type="submit" id="ask-submit">${icon("sparkles")}Ask your notes</button></div><div class="health-note" id="ask-health"></div></form><div class="small muted">Try a question</div><div class="ask-examples">${askExamples()
+    `<div class="intro illustrated-intro ask-intro"><span class="intro-symbol" aria-hidden="true">${icon("sparkles")}</span><div class="eyebrow">A little curiosity goes a long way</div><h1>Connect the ideas.</h1><p>Answers grounded in your saved lessons, with sources you can inspect.</p></div><div class="ask-layout"><div><form id="ask-form" class="ask-box"><label class="field-label" for="ask-q">Your question</label><textarea id="ask-q" placeholder="What would you like to understand?" required>${esc(q)}</textarea><div class="flex between wrap"><div class="flex wrap"><label class="small muted" for="ask-course">Course</label><select class="select" id="ask-course">${scopeOptions(course)}</select></div><button class="button primary" type="submit" id="ask-submit">${icon("sparkles")}Ask your notes</button></div><div class="health-note" id="ask-health"></div></form><div class="small muted">Try a question</div><div class="ask-examples">${askExamples()
       .map(
         (q) =>
           `<button class="button subtle" data-action="ask-example" data-q="${esc(q)}">${esc(q)}</button>`,
@@ -1500,7 +1550,8 @@ document.addEventListener("click", async (e) => {
       const epoch = state.epoch;
       await home(state.current, epoch);
       if (epoch === state.epoch) window.scrollTo({ top, behavior: "instant" });
-    } else if (action === "rename-course") renameCourse(b.dataset.courseId);
+    } else if (action === "generate-course") await generateCourse(b);
+    else if (action === "rename-course") renameCourse(b.dataset.courseId);
     else if (action === "retry-route") route();
     else if (action === "source") updateSource(Number(b.dataset.t), true);
     else if (action === "preview") previewNote(b.dataset.note);
