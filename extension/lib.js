@@ -1,6 +1,7 @@
 // Shared by the service worker and the side panel: settings, server API, page access,
 // screenshots and the offline queue.
 import { probePage, controlVideo, fetchTranscript, videoTime } from "./page.js";
+import { isSupportedSite } from "./sites.js";
 
 export const DEFAULTS = { serverUrl: "http://192.168.3.20:8765", pauseOnNote: true, autoTranscript: true, resumeAfterDraw: true };
 
@@ -46,6 +47,8 @@ export async function activeTab() {
 }
 
 async function run(tabId, func, args = [], world = "MAIN") {
+  const tab = await chrome.tabs.get(tabId);
+  if (!isSupportedSite(tab.url)) throw new Error("Study Notes only works on Udemy and DeepLearning.AI.");
   const [res] = await chrome.scripting.executeScript({ target: { tabId }, func, args, world });
   return res?.result;
 }
@@ -80,6 +83,8 @@ export function lessonInfo(p) {
 }
 
 export async function toast(tabId, text) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!isSupportedSite(tab?.url)) return;
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "ISOLATED",
@@ -107,7 +112,12 @@ function blobToDataUrl(blob) {
 
 /** Screenshot of the visible tab, cropped to the video player. */
 export async function captureVideo(tab, p) {
-  const full = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+  const [visible] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+  if (visible?.id !== tab.id || !isSupportedSite(visible.url))
+    throw new Error("Open the Udemy or DeepLearning.AI lesson before taking a screenshot.");
+  const full = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }).catch(() => {
+    throw new Error("Click the Study Notes toolbar icon on this lesson, then retry the screenshot (or press Alt+S).");
+  });
   const bmp = await createImageBitmap(await (await fetch(full)).blob());
   const scale = bmp.width / p.viewport.w;
   const r = p.rect;

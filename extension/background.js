@@ -2,8 +2,31 @@ import {
   activeTab, addBookmark, addNote, api, captureAndDraw, captureVideo, control, enqueue, flush, fmtT, probe, saveQuote, settings,
   syncTranscript, toast,
 } from "./lib.js";
+import { isSupportedSite, isLessonUrl } from "./sites.js";
 
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+// Handle the action ourselves so Chrome grants activeTab for screenshots as well
+// as opening the tab's panel. The built-in panel toggle does not grant it.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+chrome.action.onClicked.addListener((tab) => {
+  if (isSupportedSite(tab.url)) chrome.sidePanel.open({ tabId: tab.id }).catch(console.warn);
+});
+
+// No global panel: each supported tab opts in independently. Chrome hides that
+// tab's panel when switching to another site and restores it on return.
+const panelReady = chrome.sidePanel.setOptions({ enabled: false });
+async function updatePanel(tabId) {
+  await panelReady;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab) return;
+  const enabled = isSupportedSite(tab.url);
+  await chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled });
+  await chrome.action[enabled ? "enable" : "disable"](tabId);
+}
+chrome.tabs.onActivated.addListener(({ tabId }) => updatePanel(tabId).catch(console.warn));
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.url || info.status === "loading" || info.status === "complete") updatePanel(tabId).catch(console.warn);
+});
+chrome.tabs.query({}).then((tabs) => Promise.all(tabs.map((tab) => updatePanel(tab.id)))).catch(console.warn);
 
 // Retry unsynced notes every minute (e.g. after the Pi was offline).
 chrome.alarms.create("flush", { periodInMinutes: 1 });
@@ -12,7 +35,7 @@ chrome.runtime.onStartup.addListener(() => flush());
 
 chrome.commands.onCommand.addListener(async (command) => {
   const tab = await activeTab();
-  if (!tab?.id) return;
+  if (!tab?.id || !isSupportedSite(tab.url)) return;
   const p = await probe(tab.id);
   if (!p?.hasVideo) {
     toast(tab.id, "Study Notes: no video on this page");
@@ -58,10 +81,9 @@ chrome.windows.onRemoved.addListener(async (winId) => {
 });
 
 // Save every lesson's transcript as soon as its video loads, notes or not.
-const LESSON_URL = /^https:\/\/(?:learn\.deeplearning\.ai\/courses\/[^/]+\/lesson\/|(?:[a-z0-9-]+\.)?udemy\.com\/course\/[^/]+\/learn\/lecture\/)/;
 const autoSaving = new Map(); // tabId -> lesson URL being saved
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-  if ((info.url || info.status === "complete") && LESSON_URL.test(tab.url || "")) autoSaveTranscript(tabId, tab.url);
+  if ((info.url || info.status === "complete") && isLessonUrl(tab.url)) autoSaveTranscript(tabId, tab.url);
 });
 
 async function autoSaveTranscript(tabId, url) {
@@ -71,6 +93,7 @@ async function autoSaveTranscript(tabId, url) {
     // The video and its playlist load a little after the page; retry for ~30 s.
     for (let i = 0; i < 15 && autoSaving.get(tabId) === url; i++) {
       await new Promise((r) => setTimeout(r, 2000));
+      if (!(await settings()).autoTranscript) return;
       const tab = await chrome.tabs.get(tabId).catch(() => null);
       if (!tab || tab.url !== url) return;
       const p = await probe(tabId);

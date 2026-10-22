@@ -23,7 +23,8 @@ async function loadLesson(p) {
   }
 }
 
-async function ensureTranscript(lesson) {
+async function ensureTranscript(lesson, force = false) {
+  if (!force && !(await settings()).autoTranscript) return;
   if (!lesson || lesson.has_transcript || transcriptTried.has(lesson.id)) return;
   transcriptTried.add(lesson.id);
   $("#transcriptState").textContent = "📜 fetching transcript…";
@@ -263,7 +264,7 @@ $("#processBtn").onclick = async () => {
     const p = await probe(state.tab.id);
     let lesson = await api("/api/lessons/resolve", { method: "POST", body: lessonInfo(p) });
     transcriptTried.delete(lesson.id);
-    await ensureTranscript(lesson);
+    await ensureTranscript(lesson, true);
     const job = await api(`/api/lessons/${lesson.id}/process`, { method: "POST" });
     await pollJob(job.id);
   } catch (e) {
@@ -437,12 +438,24 @@ $("#settingsBtn").onclick = async () => {
 };
 $("#settings").onsubmit = async (e) => {
   e.preventDefault();
-  await saveSettings({ serverUrl: $("#serverUrl").value.replace(/\/$/, ""), pauseOnNote: $("#pauseOnNote").checked,
-    autoTranscript: $("#autoTranscript").checked, resumeAfterDraw: $("#resumeAfterDraw").checked });
-  $("#settings").hidden = true;
-  await checkHealth();
-  flush();
-  refresh();
+  const error = $("#settingsError");
+  error.hidden = true;
+  try {
+    const server = new URL($("#serverUrl").value);
+    if (!["http:", "https:"].includes(server.protocol)) throw new Error("Use an HTTP or HTTPS server URL.");
+    // Only the chosen notes server gets additional access, on an explicit Save.
+    const granted = await chrome.permissions.request({ origins: [`${server.protocol}//${server.hostname}/*`] });
+    if (!granted) throw new Error("Allow access to the notes server to save this address.");
+    await saveSettings({ serverUrl: $("#serverUrl").value.replace(/\/$/, ""), pauseOnNote: $("#pauseOnNote").checked,
+      autoTranscript: $("#autoTranscript").checked, resumeAfterDraw: $("#resumeAfterDraw").checked });
+    $("#settings").hidden = true;
+    await checkHealth();
+    flush();
+    refresh();
+  } catch (e) {
+    error.textContent = e.message;
+    error.hidden = false;
+  }
 };
 
 // ---------- wiring ----------

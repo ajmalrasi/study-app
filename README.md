@@ -39,6 +39,21 @@ on captions being provided for that lecture; English is preferred when available
 
 ## While watching
 
+Study Notes is available only on Udemy and `learn.deeplearning.ai`. Open it with
+the toolbar icon on your lesson. It hides on other sites and returns when you
+switch back to a lesson where it was open. Notes-server pages remain accessible
+through Open and Search / Ask, but do not activate the extension panel.
+
+With **Save every lesson's transcript automatically** enabled, loading a lesson
+in a background tab can save its available subtitles even while the panel is
+hidden. This does not crawl a course, record audio or video, or take automatic
+screenshots. Turn that setting off to stop automatic transcript saving.
+
+The extension has required website access only to the two learning sites and
+the default local notes server. A custom server requests access to that server
+when you save its address. Screenshots use temporary access granted by clicking
+the toolbar icon on the lesson or pressing the screenshot shortcut.
+
 | Key (Mac: Option) | What it does |
 |---|---|
 | `Alt+N` | Note box over the video at the current time (video pauses, Enter saves and resumes, tick ⭐ for important) |
