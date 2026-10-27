@@ -1,3 +1,5 @@
+import { createQuizWorkspace } from './quizzes.js';
+
 const $ = (s, parent = document) => parent.querySelector(s);
 const $$ = (s, parent = document) => [...parent.querySelectorAll(s)];
 const esc = (s) =>
@@ -1433,7 +1435,9 @@ function setDrawer(open) {
     $(".drawer-close")?.focus();
   } else $("#menu-toggle").focus();
 }
+const quizWorkspace = createQuizWorkspace({ api, esc, icon, fmt, videoLink, setPage, setBreadcrumb, navigate, toast });
 async function route() {
+  await quizWorkspace.leave();
   savePosition();
   clearTimeout(state.poll);
   state.controller?.abort();
@@ -1450,7 +1454,7 @@ async function route() {
   window.scrollTo({ top: 0, behavior: "instant" });
   try {
     if (
-      !["overview", "library", "lesson", "review", "ask", "search"].includes(
+      !["overview", "library", "lesson", "review", "ask", "search", "quizzes"].includes(
         route.page,
       )
     ) {
@@ -1465,6 +1469,7 @@ async function route() {
     else if (route.page === "lesson") await lessonPage(route, epoch);
     else if (route.page === "review") await reviewPage(route, epoch);
     else if (route.page === "search") await searchPage(route, epoch);
+    else if (route.page === "quizzes") await quizWorkspace.load(route.params);
     else askPage(route);
     if (epoch !== state.epoch) return;
     renderNavigation();

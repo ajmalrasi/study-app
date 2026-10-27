@@ -1,6 +1,6 @@
 import {
   activeTab, addBookmark, addNote, api, captureAndDraw, captureVideo, control, enqueue, flush, fmtT, probe, saveQuote, settings,
-  syncTranscript, toast,
+  syncTranscript, toast, syncCourseSections, udemyCaption,
 } from "./lib.js";
 import { isSupportedSite, isLessonUrl } from "./sites.js";
 
@@ -30,8 +30,58 @@ chrome.tabs.query({}).then((tabs) => Promise.all(tabs.map((tab) => updatePanel(t
 
 // Retry unsynced notes every minute (e.g. after the Pi was offline).
 chrome.alarms.create("flush", { periodInMinutes: 1 });
-chrome.alarms.onAlarm.addListener((a) => a.name === "flush" && flush());
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === "flush") { flush(); processCourseImports(); } });
 chrome.runtime.onStartup.addListener(() => flush());
+
+let importing = false;
+async function processCourseImports() {
+  if (importing) return;
+  importing = true;
+  try {
+    const tabs = await chrome.tabs.query({ url: ["https://*.udemy.com/course/*"] });
+    for (const tab of tabs) {
+      const p = await probe(tab.id);
+      if (!p?.courseSlug?.startsWith("udemy-")) continue;
+      const job = await api(`/api/transcript-imports/claim?course_slug=${encodeURIComponent(p.courseSlug)}`, { method: "POST" });
+      if (!job) continue;
+      for (const item of job.items.filter(i => i.status === "pending")) {
+        let status = "saved", error = "";
+        try {
+          const caption = await udemyCaption(tab.id, job.platform_course_id, item.external_id);
+          if (caption?.error) {
+            status = caption.noCaptions ? "no_captions" : "error";
+            error = caption.error;
+          } else {
+            const lesson = await api("/api/lessons/resolve", { method: "POST", body: {
+              url: item.url_key, title: item.title, course: p.course, course_slug: p.courseSlug, module: item.section_title,
+            } });
+            await api(`/api/lessons/${lesson.id}/transcript`, { method: "PUT", body: caption, timeout: 30000 });
+          }
+        } catch (e) { status = "error"; error = e.message; }
+        await api(`/api/transcript-imports/${job.id}/items/${item.item_id}`, { method: "POST", body: { lease: job.lease, status, error } });
+      }
+    }
+  } catch (e) { console.warn("Course caption import will retry:", e.message); }
+  finally { importing = false; }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (sender.id !== chrome.runtime.id) return;
+  if (message.type === "sync-course-sections") {
+    (async () => {
+      try {
+        const p = await probe(message.tabId);
+        respond({ result: await syncCourseSections(message.tabId, p) });
+        processCourseImports();
+      } catch (e) { respond({ error: e.message }); }
+    })();
+    return true;
+  }
+  if (message.type === "check-course-imports") {
+    processCourseImports();
+    respond({ ok: true });
+  }
+});
 
 chrome.commands.onCommand.addListener(async (command) => {
   const tab = await activeTab();
@@ -84,6 +134,7 @@ chrome.windows.onRemoved.addListener(async (winId) => {
 const autoSaving = new Map(); // tabId -> lesson URL being saved
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if ((info.url || info.status === "complete") && isLessonUrl(tab.url)) autoSaveTranscript(tabId, tab.url);
+  if (info.status === "complete" && /^https:\/\/[^/]*udemy\.com\/course\//.test(tab.url || "")) processCourseImports();
 });
 
 async function autoSaveTranscript(tabId, url) {

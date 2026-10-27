@@ -11,7 +11,7 @@ export function probePage() {
   if (udemy) lessonUrl.search = "";
   const url = lessonUrl.href;
   const m = location.pathname.match(/\/courses\/([^/]+)\/lesson\/[^/]+\/([^/?#]+)/);
-  let title = document.title, course = "", courseSlug = "", module = "";
+  let title = document.title, course = "", courseSlug = "", module = "", platformCourseId = null;
   if (m) {
     courseSlug = m[1];
     course = document.title.replace(/\s*-\s*DeepLearning\.AI.*$/i, "").trim() || courseSlug;
@@ -23,17 +23,24 @@ export function probePage() {
   if (udemy) {
     const match = location.pathname.match(/\/course\/([^/]+)(?:\/learn\/lecture\/(\d+))?/);
     if (match) {
+      try {
+        platformCourseId = JSON.parse(document.querySelector('[data-module-id="course-taking"]')?.getAttribute("data-module-args") || "{}").courseId || null;
+      } catch { /* A partially mounted Udemy page can briefly have incomplete arguments. */ }
+      if (!platformCourseId) {
+        const report = [...document.querySelectorAll('a[href*="related_object_id="]')].find(a => /report/.test(a.href));
+        platformCourseId = report ? new URL(report.href).searchParams.get("related_object_id") : null;
+      }
       courseSlug = `udemy-${match[1]}`;
       const text = (selector) => document.querySelector(selector)?.textContent?.trim();
-      course = text('[data-purpose="course-title"]') || text('header h1') || match[1].replace(/-/g, " ");
+      course = text('[data-purpose="course-title"]') || text('header h1') || text('h1') || match[1].replace(/-/g, " ");
       title = text('[data-purpose="lecture-title"]') || text('[aria-current="true"] [data-purpose="item-title"]') ||
         (match[2] ? `Lecture ${match[2]}` : document.title);
       module = text('[data-purpose="section-panel"]:has([aria-current="true"]) [data-purpose="section-heading"]') || "";
       // A landing-page preview must not be saved as an enrolled lecture.
-      if (!match[2]) return { hasVideo: false, url, title, course, courseSlug, module };
+      if (!match[2]) return { hasVideo: false, url, title, course, courseSlug, module, platformCourseId };
     }
   }
-  if (!video) return { hasVideo: false, url, title, course, courseSlug, module };
+  if (!video) return { hasVideo: false, url, title, course, courseSlug, module, platformCourseId };
   // The <video> can report a 0 height while its container is what's visible.
   let el = video, rect = el.getBoundingClientRect();
   while (el.parentElement && rect.height < 50) {
@@ -41,11 +48,84 @@ export function probePage() {
     rect = el.getBoundingClientRect();
   }
   return {
-    hasVideo: true, url, title, course, courseSlug, module,
+    hasVideo: true, url, title, course, courseSlug, module, platformCourseId,
     t: video.currentTime, duration: isFinite(video.duration) ? video.duration : null, paused: video.paused,
     rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
     viewport: { w: window.innerWidth, h: window.innerHeight },
   };
+}
+
+// These functions deliberately do not require a <video> or navigate lessons.
+// They run inside the signed-in Udemy tab; cookies never leave the browser.
+export async function fetchUdemyCurriculum(courseId) {
+  if (!/(^|\.)udemy\.com$/.test(location.hostname) || !/^\d+$/.test(String(courseId)))
+    return { error: "Open the signed-in Udemy course first." };
+  try {
+    let next = `/api-2.0/courses/${courseId}/subscriber-curriculum-items/?page_size=200`;
+    const seen = new Set(), rows = [];
+    let expected = null;
+    while (next) {
+      const url = new URL(next, location.origin);
+      if (url.origin !== location.origin || url.pathname !== `/api-2.0/courses/${courseId}/subscriber-curriculum-items/` || seen.has(url.href))
+        throw new Error("The curriculum returned an invalid or repeated page.");
+      seen.add(url.href);
+      const response = await fetch(url.href, { credentials: "same-origin", signal: AbortSignal.timeout(30000) });
+      if (!response.ok) throw new Error(`Udemy curriculum request failed (${response.status}). Sign in and retry.`);
+      const data = await response.json();
+      if (!Array.isArray(data.results) || !Number.isInteger(data.count) || (expected !== null && expected !== data.count))
+        throw new Error("The course list changed while syncing. Retry the sync.");
+      expected = data.count;
+      rows.push(...data.results);
+      if (rows.length > 20000 || seen.size > 200) throw new Error("The curriculum is larger than supported.");
+      next = data.next;
+    }
+    if (rows.length !== expected) throw new Error("Some curriculum pages are missing. Retry the sync.");
+    const sections = [];
+    let section = null;
+    for (const item of rows) {
+      if (item._class === "chapter") {
+        section = { id: String(item.id), title: item.title, items: [] };
+        sections.push(section);
+      } else {
+        if (!section) throw new Error("A lesson has no section. The course list could not be verified.");
+        const kind = item._class === "quiz" ? "quiz" : item.asset?.asset_type === "Video" ? "video"
+          : item.asset?.asset_type === "Article" ? "article" : "other";
+        section.items.push({ id: String(item.id), title: item.title, kind });
+      }
+    }
+    return { sections, item_count: rows.length, complete: true };
+  } catch (e) { return { error: e.message }; }
+}
+
+export async function fetchUdemyCaption(courseId, lectureId) {
+  if (!/(^|\.)udemy\.com$/.test(location.hostname) || !/^\d+$/.test(String(courseId)) || !/^\d+$/.test(String(lectureId)))
+    return { error: "A signed-in Udemy course tab is needed." };
+  try {
+    const response = await fetch(`/api-2.0/users/me/subscribed-courses/${courseId}/lectures/${lectureId}/?fields[lecture]=asset&fields[asset]=captions`,
+      { credentials: "same-origin", signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`Udemy caption request failed (${response.status}). Sign in and retry.`);
+    const lecture = await response.json();
+    const captions = (lecture.asset?.captions || []).filter(c => c.url && c.status !== 0);
+    const caption = captions.find(c => /^en/i.test(c.locale_id || c.language || "")) || captions[0];
+    if (!caption) return { noCaptions: true, error: "No captions are available for this video." };
+    const get = async url => {
+      const r = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      if (!r.ok) throw new Error(`Caption download failed (${r.status}). Retry to refresh its link.`);
+      return r.text();
+    };
+    let vtt = await get(caption.url);
+    if (!vtt.trimStart().startsWith("WEBVTT")) {
+      if (!vtt.trimStart().startsWith("#EXTM3U")) throw new Error("The caption format is not supported.");
+      const segments = vtt.split("\n").map(s => s.trim()).filter(s => s && !s.startsWith("#"));
+      const parts = [];
+      for (const segment of segments) {
+        const part = await get(new URL(segment, caption.url).href);
+        parts.push(parts.length ? part.replace(/^WEBVTT[^\n]*\n(?:X-TIMESTAMP[^\n]*\n)?/, "") : part);
+      }
+      vtt = parts.join("\n\n");
+    }
+    return { vtt, src: caption.url };
+  } catch (e) { return { error: e.message }; }
 }
 
 export function controlVideo(action, value) {

@@ -62,6 +62,7 @@ async function refresh() {
     state.tab = await activeTab();
     state.p = state.tab?.id && /^https?:/.test(state.tab.url || "") ? await probe(state.tab.id) : null;
     const p = state.p;
+    $("#courseQuizTools").hidden = !p?.courseSlug?.startsWith("udemy-");
     $("#tools").classList.toggle("disabled-area", !p?.hasVideo);
     $("#composer").classList.toggle("disabled-area", !p?.hasVideo);
     $("#processBtn").disabled = !p?.hasVideo;
@@ -83,6 +84,7 @@ async function refresh() {
     $("#lessonTitle").textContent = p.title;
     $("#lessonSub").textContent = [p.course, p.module].filter(Boolean).join(" · ");
     state.lesson = await loadLesson(p);
+    $("#lessonSub").textContent = [p.course, p.module || state.lesson?.module].filter(Boolean).join(" · ");
     render(await queued());
     if (state.lesson && state.server !== "offline") ensureTranscript(state.lesson);
     if (state.lesson?.job && ["queued", "running"].includes(state.lesson.job.status)) pollJob(state.lesson.job.id);
@@ -250,6 +252,19 @@ $("#quoteBtn").onclick = () => withVideo(async (p) => {
   flash($("#quoteBtn"), `✓ ${fmtT(said[0].s)}`);
 });
 $("#askBtn").onclick = () => chrome.tabs.create({ url: `${state.serverUrl}/#search` });
+$("#openQuizzesBtn").onclick = () => chrome.tabs.create({ url: `${state.serverUrl}/#quizzes` });
+$("#syncSectionsBtn").onclick = async () => {
+  const button = $("#syncSectionsBtn"), output = $("#courseSyncState");
+  button.disabled = true;
+  output.textContent = "Reading every curriculum page… Keep this Udemy tab open.";
+  try {
+    const reply = await chrome.runtime.sendMessage({ type: "sync-course-sections", tabId: state.tab.id });
+    if (reply.error) throw new Error(reply.error);
+    output.textContent = `${reply.result.sections.length} sections synced. Open Section quizzes to choose lessons and fetch missing captions.`;
+    await refresh();
+  } catch (e) { output.textContent = e.message; }
+  finally { button.disabled = false; }
+};
 
 $("#openReview").onclick = () => chrome.tabs.create({ url: `${state.serverUrl}/${state.lesson ? `#lesson/${state.lesson.id}` : ""}` });
 

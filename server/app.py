@@ -31,6 +31,8 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "openclaw")
 # material under this many characters so prompt + material stays well inside the limit.
 MATERIAL_CHARS = int(os.environ.get("MATERIAL_CHARS", "15000"))
 PROMPT_VERSION = 1
+QUIZ_WORKER_ENABLED = os.environ.get("QUIZ_WORKER_ENABLED", "1") != "0"
+GENERATION_LOCK = threading.Lock()
 
 for d in (FILES, MARKDOWN):
     d.mkdir(parents=True, exist_ok=True)
@@ -303,15 +305,18 @@ def upsert_lesson(c, body: LessonIn):
                   (body.course_slug, course_title(body.course, body.course_slug)))
         course_id = c.execute("SELECT id FROM courses WHERE slug=?", (body.course_slug,)).fetchone()["id"]
     key, now = url_key(body.url), time.time()
+    section = c.execute("""SELECT cs.title FROM curriculum_items ci JOIN course_sections cs ON cs.id=ci.section_id
+        WHERE ci.url_key=? AND ci.active=1 AND cs.active=1""", (key,)).fetchone()
+    module = section[0] if section else body.module
     row = c.execute("SELECT id FROM lessons WHERE url_key=?", (key,)).fetchone()
     if row:
         c.execute("""UPDATE lessons SET title=?, course_id=COALESCE(?, course_id), module=COALESCE(NULLIF(?, ''), module),
                      duration=COALESCE(?, duration) WHERE id=?""",
-                  (body.title, course_id, body.module, body.duration, row["id"]))
+                  (body.title, course_id, module, body.duration, row["id"]))
         return row["id"]
     return c.execute("""INSERT INTO lessons (course_id, url_key, title, module, duration, created, updated)
                         VALUES (?,?,?,?,?,?,?)""",
-                     (course_id, key, body.title, body.module, body.duration, now, now)).lastrowid
+                     (course_id, key, body.title, module, body.duration, now, now)).lastrowid
 
 
 @app.post("/api/lessons/resolve")
@@ -676,7 +681,8 @@ def job_worker():
             if not job:
                 break
             try:
-                run_job(job["id"])
+                with GENERATION_LOCK:
+                    run_job(job["id"])
             except Exception as e:  # noqa: BLE001 - surface any failure to the UI
                 with db() as c:
                     c.execute("UPDATE jobs SET status='error', error=?, finished=? WHERE id=?",
@@ -1001,6 +1007,15 @@ def undo_review(card_id: int, body: UndoIn):
                   (review["previous_box"], review["previous_due"], version, card_id))
         c.execute("UPDATE card_reviews SET undone=1 WHERE id=?", (body.review_id,))
         return {"box": review["previous_box"], "due": review["previous_due"], "review_version": version}
+
+
+# The package import supports tests from the repository root; the local import
+# supports the deployed `uvicorn app:app` working directory.
+try:
+    from server.quiz_engine import install_quizzes
+except ModuleNotFoundError:
+    from quiz_engine import install_quizzes
+install_quizzes(app, globals())
 
 
 # Drafts are drawings that were opened but never saved; drop ones older than a day.

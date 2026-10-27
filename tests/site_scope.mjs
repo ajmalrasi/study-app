@@ -24,7 +24,7 @@ const chrome = {
     onActivated: { addListener: fn => events.activated.push(fn) }, captureVisibleTab: async () => { captured++; } },
   scripting: { executeScript: async () => { injected++; return [{ result: true }]; } },
   alarms: { create() {}, onAlarm: { addListener() {} } },
-  runtime: { onStartup: { addListener() {} } },
+  runtime: { onStartup: { addListener() {} }, onMessage: { addListener() {} } },
   commands: { onCommand: { addListener: fn => events.commands.push(fn) } },
   windows: { onRemoved: { addListener() {} } },
 };

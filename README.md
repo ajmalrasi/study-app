@@ -98,6 +98,45 @@ video. Captures open in a zoomable preview, with a separate action to edit their
 Paper, Evening, and System appearances and a comfortable reading size are available in
 **Reading & appearance**. Reading positions and answer drafts are saved in that browser.
 
+## Quizzes across lessons
+
+Open **Quizzes** in the notes website to create a saved quiz with 1–100 written-answer or
+multiple-choice questions. Choose a whole course, one or more sections, or an explicit set
+of saved lessons. Quizzes and every attempt are stored on the server, including draft answers,
+feedback, results, and the original transcript evidence. You can resume an attempt, retake a
+quiz, or practise questions you missed without replacing earlier results.
+
+For Udemy sections:
+
+1. Open the signed-in course in Chrome, with the updated Study Notes extension loaded.
+2. Open the extension and click **Sync course sections**. Every curriculum page is checked
+   before the section list is saved. Existing lessons are grouped using their lecture IDs.
+3. On **Quizzes**, select the course and sections. The page lists available and missing video
+   transcripts separately from articles, quizzes, and other items.
+4. Click **Fetch missing transcripts**, keeping that Udemy course tab open. The extension
+   checks the queue within a minute and fetches captions through the signed-in browser without
+   playing the lessons. Refresh coverage after the import finishes. Sign-in errors and videos
+   without captions remain listed; another import retries missing items.
+5. Choose the question count and format, then create the quiz. Missing transcripts block
+   creation unless you explicitly allow a partial quiz.
+
+Generation runs in the background and resumes saved work after a restart. It processes
+**every included transcript chunk**, plans questions across lessons, retrieves related evidence
+within the selection, and asks the model to verify each batch. A quiz is labelled **Partial
+coverage** if transcripts are missing, lessons have no questions, or fewer supported questions
+were generated than requested. A small question count cannot guarantee every lesson is tested.
+The coverage view shows exactly which lessons are represented.
+
+Retrieval currently uses keyword search over the quiz's source snapshots. Semantic embeddings
+are not required. Updating or deleting a lesson does not change an existing quiz's evidence;
+the coverage view flags source changes. Create a new quiz to use updated transcripts.
+
+For other platforms, use **Selected saved lessons**. A complete external curriculum is only
+verified for Udemy. Quiz data is included in the existing SQLite backups.
+
+Verification: `python3 -m unittest discover -s tests -p 'test*.py'` and
+`node tests/udemy_curriculum.mjs`, in addition to the existing extension checks.
+
 ## Data
 
 On the Pi under `~/apps/study_notes/data/`:
