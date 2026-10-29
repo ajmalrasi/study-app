@@ -19,9 +19,9 @@ export function createQuizWorkspace({ api, esc, icon, fmt, videoLink, setPage, s
     if (!c) return '<p class="muted">Save a lesson with the extension to start creating quizzes.</p>';
     const available = c.lessons.filter(l => l.has_transcript);
     return `<label class="field-label" for="q-mode">Choose material</label><select id="q-mode" class="select">
-      ${c.inventory ? '<option value="sections">Selected sections</option><option value="course">Entire course</option>' : ''}
+      ${c.inventory ? `<option value="sections">Selected ${c.inventory.platform === 'deeplearning' ? 'modules' : 'sections'}</option><option value="course">Entire course</option>` : ''}
       <option value="saved">Selected saved lessons</option></select>
-      ${!c.inventory ? `<p class="small muted">${c.slug.startsWith('udemy-') ? 'To see Udemy sections, open the course, then choose <strong>Sync course sections</strong> in the Study Notes extension.' : 'Choose from the lessons saved in your library.'} Saved lesson selection covers only the lessons listed below.</p>` : `<p class="small muted">Complete curriculum synced ${esc(date(c.inventory.synced))}. Refresh it in the extension when the course changes.</p>`}
+      ${!c.inventory ? `<p class="small muted">Open this course on Udemy or DeepLearning.AI, then choose <strong>Sync course sections</strong> in the Study Notes extension to see its complete outline. Saved lesson selection covers only the lessons listed below.</p>` : `<p class="small muted">Complete curriculum synced ${esc(date(c.inventory.synced))}. Refresh it in the extension when the course changes.</p>`}
       <div id="q-sections" class="quiz-selection" ${c.inventory ? '' : 'hidden'}>${c.sections.map((s, i) => `<label class="quiz-select-row"><input type="checkbox" name="q-section" value="${s.id}" ${i === 0 ? 'checked' : ''}><span><strong>${esc(s.title)}</strong><small>${s.available} of ${s.videos} video transcripts saved · ${s.items.length - s.videos} other items</small></span></label>`).join('')}</div>
       <div id="q-lessons" class="quiz-selection" ${c.inventory ? 'hidden' : ''}>${c.lessons.map(l => `<label class="quiz-select-row"><input type="checkbox" name="q-lesson" value="${l.id}" ${l.has_transcript ? 'checked' : ''}><span>${esc(l.title)}<small>${l.has_transcript ? 'Transcript saved' : 'Transcript missing'}</small></span></label>`).join('') || '<p>No saved lessons yet.</p>'}</div>
       <p id="q-coverage" class="quiz-coverage" role="status"></p>
@@ -227,7 +227,7 @@ export function createQuizWorkspace({ api, esc, icon, fmt, videoLink, setPage, s
         const s = selection();
         if (!s.section_ids.length) throw new Error('Select at least one section.');
         await api('/api/transcript-imports',{method:'POST',body:{section_ids:s.section_ids}});
-        toast('Import queued. Keep the signed-in Udemy course tab open with the updated extension.');
+        toast('Import queued. Keep the signed-in course tab open with the updated extension.');
         await refreshImports();
       } else if (name === 'pause' || name === 'resume') {
         await api(`/api/quizzes/${quiz.id}/${name}`,{method:'POST'});

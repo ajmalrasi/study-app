@@ -106,14 +106,15 @@ of saved lessons. Quizzes and every attempt are stored on the server, including 
 feedback, results, and the original transcript evidence. You can resume an attempt, retake a
 quiz, or practise questions you missed without replacing earlier results.
 
-For Udemy sections:
+For Udemy sections or DeepLearning.AI modules:
 
-1. Open the signed-in course in Chrome, with the updated Study Notes extension loaded.
-2. Open the extension and click **Sync course sections**. Every curriculum page is checked
-   before the section list is saved. Existing lessons are grouped using their lecture IDs.
+1. Open the signed-in course in Chrome, with Study Notes 0.5.0 or later loaded.
+2. Open the extension and click **Sync course sections**. Every Udemy curriculum page is
+   checked; DeepLearning.AI's complete lesson inventory is checked against every module's
+   contents. Existing lessons are grouped using their stable lesson IDs.
 3. On **Quizzes**, select the course and sections. The page lists available and missing video
    transcripts separately from articles, quizzes, and other items.
-4. Click **Fetch missing transcripts**, keeping that Udemy course tab open. The extension
+4. Click **Fetch missing transcripts**, keeping that course tab open. The extension
    checks the queue within a minute and fetches captions through the signed-in browser without
    playing the lessons. Refresh coverage after the import finishes. Sign-in errors and videos
    without captions remain listed; another import retries missing items.
@@ -131,11 +132,15 @@ Retrieval currently uses keyword search over the quiz's source snapshots. Semant
 are not required. Updating or deleting a lesson does not change an existing quiz's evidence;
 the coverage view flags source changes. Create a new quiz to use updated transcripts.
 
-For other platforms, use **Selected saved lessons**. A complete external curriculum is only
-verified for Udemy. Quiz data is included in the existing SQLite backups.
+DeepLearning.AI videos are imported from each lesson's caption metadata without playing the
+video. Readings, labs, and existing quizzes are listed as non-video items. A changed lesson
+title or URL slug retains the saved lesson and notes through its stable ID. Course formats
+that cannot be completely verified fail explicitly rather than saving an incomplete outline.
+Quiz data is included in the existing SQLite backups.
 
 Verification: `python3 -m unittest discover -s tests -p 'test*.py'` and
-`node tests/udemy_curriculum.mjs`, in addition to the existing extension checks.
+`node tests/udemy_curriculum.mjs`, `node tests/dlai_curriculum.mjs`, in addition to the
+existing extension checks.
 
 ## Data
 

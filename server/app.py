@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -297,6 +298,32 @@ def url_key(url):
     return re.sub(r"[?#].*$", "", url).rstrip("/")
 
 
+def lesson_identity(url):
+    """A provider's lesson ID survives title changes and URL slug encoding."""
+    parsed = urlsplit(url)
+    if parsed.scheme != "https":
+        return None
+    if parsed.hostname == "learn.deeplearning.ai":
+        match = re.fullmatch(r"/courses/([a-zA-Z0-9_-]+)/lesson/([a-zA-Z0-9_-]+)/[^/]+/?", parsed.path)
+        return (match[1], match[2]) if match else None
+    if parsed.hostname == "udemy.com" or (parsed.hostname or "").endswith(".udemy.com"):
+        match = re.fullmatch(r"/course/([^/]+)/learn/lecture/(\d+)/?", parsed.path)
+        return ("udemy-" + match[1], match[2]) if match else None
+    return None
+
+
+def find_lesson_by_source(c, url):
+    row = c.execute("SELECT * FROM lessons WHERE url_key=?", (url_key(url),)).fetchone()
+    identity = lesson_identity(url)
+    if row or not identity:
+        return row
+    for candidate in c.execute("""SELECT l.* FROM lessons l JOIN courses c ON c.id=l.course_id
+        WHERE c.slug=? ORDER BY l.transcript!='' DESC,l.updated DESC""", (identity[0],)):
+        if lesson_identity(candidate["url_key"]) == identity:
+            return candidate
+    return None
+
+
 def upsert_lesson(c, body: LessonIn):
     course_id = None
     if body.course_slug:
@@ -305,10 +332,17 @@ def upsert_lesson(c, body: LessonIn):
                   (body.course_slug, course_title(body.course, body.course_slug)))
         course_id = c.execute("SELECT id FROM courses WHERE slug=?", (body.course_slug,)).fetchone()["id"]
     key, now = url_key(body.url), time.time()
+    row = find_lesson_by_source(c, key)
+    if row:
+        key = row["url_key"]
+    identity = lesson_identity(key)
+    effective_course = course_id or (row["course_id"] if row else None)
+    if identity and effective_course:
+        c.execute("""UPDATE curriculum_items SET url_key=? WHERE course_id=? AND external_id=? AND active=1
+            AND kind IN ('video','article','other')""", (key, effective_course, identity[1]))
     section = c.execute("""SELECT cs.title FROM curriculum_items ci JOIN course_sections cs ON cs.id=ci.section_id
         WHERE ci.url_key=? AND ci.active=1 AND cs.active=1""", (key,)).fetchone()
     module = section[0] if section else body.module
-    row = c.execute("SELECT id FROM lessons WHERE url_key=?", (key,)).fetchone()
     if row:
         c.execute("""UPDATE lessons SET title=?, course_id=COALESCE(?, course_id), module=COALESCE(NULLIF(?, ''), module),
                      duration=COALESCE(?, duration) WHERE id=?""",
@@ -328,7 +362,7 @@ def resolve_lesson(body: LessonIn):
 @app.get("/api/lessons/by-url")
 def lesson_by_url(url: str):
     with db() as c:
-        row = c.execute("SELECT id FROM lessons WHERE url_key=?", (url_key(url),)).fetchone()
+        row = find_lesson_by_source(c, url)
         if not row:
             raise HTTPException(404, "no notes for this lesson yet")
         return lesson_out(c, row["id"])

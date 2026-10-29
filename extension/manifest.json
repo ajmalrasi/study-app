@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Study Notes",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Timestamped notes, screenshots and Excalidraw sketches for course videos, processed by your local LLM.",
   "permissions": ["sidePanel", "storage", "unlimitedStorage", "scripting", "tabs", "alarms", "activeTab"],
   "host_permissions": ["https://learn.deeplearning.ai/*", "https://*.udemy.com/*", "http://192.168.3.20/*", "http://localhost/*", "http://127.0.0.1/*"],

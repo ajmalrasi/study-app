@@ -10,19 +10,21 @@ export function probePage() {
   const udemy = /(^|\.)udemy\.com$/.test(location.hostname);
   if (udemy) lessonUrl.search = "";
   const url = lessonUrl.href;
-  const m = location.pathname.match(/\/courses\/([^/]+)\/lesson\/[^/]+\/([^/?#]+)/);
-  let title = document.title, course = "", courseSlug = "", module = "", platformCourseId = null;
+  const m = location.hostname === "learn.deeplearning.ai" && location.pathname.match(/^\/courses\/([^/]+)(?:\/lesson\/[^/]+\/([^/?#]+))?/);
+  let title = document.title, course = "", courseSlug = "", module = "", platformCourseId = null, platform = null;
   if (m) {
+    platform = "deeplearning";
     courseSlug = m[1];
     course = document.title.replace(/\s*-\s*DeepLearning\.AI.*$/i, "").trim() || courseSlug;
-    const slug = decodeURIComponent(m[2]).replace(/-/g, " ").trim();
-    title = slug.charAt(0).toUpperCase() + slug.slice(1);
+    const slug = decodeURIComponent(m[2] || "").replace(/-/g, " ").trim();
+    title = slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : course;
     const crumb = [...document.querySelectorAll("nav, header")].map((n) => n.innerText).join(" ");
     module = (crumb.match(/Module\s+\d+/i) || [""])[0];
   }
   if (udemy) {
     const match = location.pathname.match(/\/course\/([^/]+)(?:\/learn\/lecture\/(\d+))?/);
     if (match) {
+      platform = "udemy";
       try {
         platformCourseId = JSON.parse(document.querySelector('[data-module-id="course-taking"]')?.getAttribute("data-module-args") || "{}").courseId || null;
       } catch { /* A partially mounted Udemy page can briefly have incomplete arguments. */ }
@@ -37,10 +39,10 @@ export function probePage() {
         (match[2] ? `Lecture ${match[2]}` : document.title);
       module = text('[data-purpose="section-panel"]:has([aria-current="true"]) [data-purpose="section-heading"]') || "";
       // A landing-page preview must not be saved as an enrolled lecture.
-      if (!match[2]) return { hasVideo: false, url, title, course, courseSlug, module, platformCourseId };
+      if (!match[2]) return { hasVideo: false, url, title, course, courseSlug, module, platformCourseId, platform };
     }
   }
-  if (!video) return { hasVideo: false, url, title, course, courseSlug, module, platformCourseId };
+  if (!video) return { hasVideo: false, url, title, course, courseSlug, module, platformCourseId, platform };
   // The <video> can report a 0 height while its container is what's visible.
   let el = video, rect = el.getBoundingClientRect();
   while (el.parentElement && rect.height < 50) {
@@ -48,7 +50,7 @@ export function probePage() {
     rect = el.getBoundingClientRect();
   }
   return {
-    hasVideo: true, url, title, course, courseSlug, module, platformCourseId,
+    hasVideo: true, url, title, course, courseSlug, module, platformCourseId, platform,
     t: video.currentTime, duration: isFinite(video.duration) ? video.duration : null, paused: video.paused,
     rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
     viewport: { w: window.innerWidth, h: window.innerHeight },

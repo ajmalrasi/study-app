@@ -1,0 +1,539 @@
+{
+  "courseId": 10074,
+  "name": "Agentic AI",
+  "slug": "agentic-ai",
+  "lessons": {
+    "pu5xbv": {
+      "slug": "pu5xbv",
+      "name": "Welcome!",
+      "type": "video",
+      "videoId": 10172096
+    },
+    "nae3i1": {
+      "slug": "nae3i1",
+      "name": "What is agentic AI?",
+      "type": "video",
+      "videoId": 10172100
+    },
+    "zqs9ty": {
+      "slug": "zqs9ty",
+      "name": "Degrees of autonomy",
+      "type": "video",
+      "videoId": 10172098
+    },
+    "k2vehc": {
+      "slug": "k2vehc",
+      "name": "Benefits of agentic AI",
+      "type": "video",
+      "videoId": 10172093
+    },
+    "bvuwkr": {
+      "slug": "bvuwkr",
+      "name": "Agentic AI applications",
+      "type": "video",
+      "videoId": 10079014
+    },
+    "moivygo8": {
+      "slug": "moivygo8",
+      "name": "Task decomposition: Identifying the steps in a workflow",
+      "type": "video",
+      "videoId": 10079015
+    },
+    "46yh5j": {
+      "slug": "46yh5j",
+      "name": "Evaluating agentic AI (evals)",
+      "type": "video",
+      "videoId": 10172094
+    },
+    "rm9bg7": {
+      "slug": "rm9bg7",
+      "name": "Agentic design patterns",
+      "type": "video",
+      "videoId": 10079017
+    },
+    "bvuwky83": {
+      "slug": "bvuwky83",
+      "name": "Optional: Set up your local environment for the ungraded labs",
+      "type": "reading_material",
+      "videoId": null
+    },
+    "rm9bgm2": {
+      "slug": "rm9bgm2",
+      "name": "Module 1 quiz",
+      "type": "quiz",
+      "videoId": null
+    },
+    "608l3k05": {
+      "slug": "608l3k05",
+      "name": "Try the research agent",
+      "type": "paid_notebook",
+      "videoId": null
+    },
+    "shknq1": {
+      "slug": "shknq1",
+      "name": "Reflection to improve outputs of a task",
+      "type": "video",
+      "videoId": 10172102
+    },
+    "uz37v2": {
+      "slug": "uz37v2",
+      "name": "Why not just direct generation?",
+      "type": "video",
+      "videoId": 10079019
+    },
+    "moivym": {
+      "slug": "moivym",
+      "name": "Chart generation workflow",
+      "type": "video",
+      "videoId": 10172103
+    },
+    "hl2ajxys": {
+      "slug": "hl2ajxys",
+      "name": "Ungraded Lab: Chart Generation",
+      "type": "notebook",
+      "videoId": null
+    },
+    "vtzr25": {
+      "slug": "vtzr25",
+      "name": "Evaluating the impact of reflection",
+      "type": "video",
+      "videoId": 10172105
+    },
+    "txqmf0": {
+      "slug": "txqmf0",
+      "name": "Using external feedback",
+      "type": "video",
+      "videoId": 10172104
+    },
+    "zqs9teds": {
+      "slug": "zqs9teds",
+      "name": "Ungraded Lab: Improving SQL Generation with Reflection",
+      "type": "notebook",
+      "videoId": null
+    },
+    "bvuwkhy": {
+      "slug": "bvuwkhy",
+      "name": "Module 2 quiz",
+      "type": "quiz",
+      "videoId": null
+    },
+    "hl2ajsys": {
+      "slug": "hl2ajsys",
+      "name": "M2 Graded Lab",
+      "type": "graded_notebook",
+      "videoId": null
+    },
+    "3s0czq": {
+      "slug": "3s0czq",
+      "name": "What are tools?",
+      "type": "video",
+      "videoId": 10172106
+    },
+    "79cpry": {
+      "slug": "79cpry",
+      "name": "Creating a tool",
+      "type": "video",
+      "videoId": 10172108
+    },
+    "154qpw": {
+      "slug": "154qpw",
+      "name": "Tool syntax",
+      "type": "video",
+      "videoId": 10079025
+    },
+    "jcl17b67": {
+      "slug": "jcl17b67",
+      "name": "Ungraded Lab: Turning functions into tools",
+      "type": "notebook",
+      "videoId": null
+    },
+    "op1t8nc1": {
+      "slug": "op1t8nc1",
+      "name": "Ungraded Lab: Email Assistant Workflow",
+      "type": "notebook",
+      "videoId": null
+    },
+    "a4gs14": {
+      "slug": "a4gs14",
+      "name": "Code execution",
+      "type": "video",
+      "videoId": 10172109
+    },
+    "x7jowg": {
+      "slug": "x7jowg",
+      "name": "MCP",
+      "type": "video",
+      "videoId": 10172110
+    },
+    "uz37vtv": {
+      "slug": "uz37vtv",
+      "name": "Module 3 quiz",
+      "type": "quiz",
+      "videoId": null
+    },
+    "gymk403p": {
+      "slug": "gymk403p",
+      "name": "M3 Graded Lab",
+      "type": "graded_notebook",
+      "videoId": null
+    },
+    "pu5xbl": {
+      "slug": "pu5xbl",
+      "name": "Evaluations (evals)",
+      "type": "video",
+      "videoId": 10172112
+    },
+    "2ftglp": {
+      "slug": "2ftglp",
+      "name": "Error analysis and prioritizing next steps",
+      "type": "video",
+      "videoId": 10172111
+    },
+    "0kbds1": {
+      "slug": "0kbds1",
+      "name": "More error analysis examples",
+      "type": "video",
+      "videoId": 10172113
+    },
+    "fwxyds": {
+      "slug": "fwxyds",
+      "name": "Component-level evaluations",
+      "type": "video",
+      "videoId": 10172114
+    },
+    "nae3i1ymg": {
+      "slug": "nae3i1ymg",
+      "name": "Ungraded Lab: Adding a component-level eval to the research workflow",
+      "type": "notebook",
+      "videoId": null
+    },
+    "ldf4ci": {
+      "slug": "ldf4ci",
+      "name": "How to address problems you identify",
+      "type": "video",
+      "videoId": 10172115
+    },
+    "154qpa": {
+      "slug": "154qpa",
+      "name": "Latency, cost optimization",
+      "type": "video",
+      "videoId": 10172116
+    },
+    "hl2aj7": {
+      "slug": "hl2aj7",
+      "name": "Development process summary",
+      "type": "video",
+      "videoId": 10172117
+    },
+    "vtzr2m1": {
+      "slug": "vtzr2m1",
+      "name": "Module 4 quiz",
+      "type": "quiz",
+      "videoId": null
+    },
+    "jcl177": {
+      "slug": "jcl177",
+      "name": "Planning workflows",
+      "type": "video",
+      "videoId": 10172119
+    },
+    "wr78er": {
+      "slug": "wr78er",
+      "name": "Creating and executing LLM plans",
+      "type": "video",
+      "videoId": 10172118
+    },
+    "egr0a8": {
+      "slug": "egr0a8",
+      "name": "Planning with code execution",
+      "type": "video",
+      "videoId": 10172120
+    },
+    "zqs9ti2dp": {
+      "slug": "zqs9ti2dp",
+      "name": "Ungraded Lab: Customer Service Agent",
+      "type": "notebook",
+      "videoId": null
+    },
+    "608l3n": {
+      "slug": "608l3n",
+      "name": "Multi-agentic workflows",
+      "type": "video",
+      "videoId": 10172122
+    },
+    "bvuwkh283": {
+      "slug": "bvuwkh283",
+      "name": "Ungraded Lab: Market Research Team",
+      "type": "notebook",
+      "videoId": null
+    },
+    "gymk4l": {
+      "slug": "gymk4l",
+      "name": "Communication patterns for multi-agent systems",
+      "type": "video",
+      "videoId": 10172121
+    },
+    "txqmfi1": {
+      "slug": "txqmfi1",
+      "name": "Module 5 quiz",
+      "type": "quiz",
+      "videoId": null
+    },
+    "2ftgl7c": {
+      "slug": "2ftgl7c",
+      "name": "M5 Graded Assignment - Agentic Workflows",
+      "type": "graded_notebook",
+      "videoId": null
+    },
+    "qjhixk": {
+      "slug": "qjhixk",
+      "name": "Conclusion",
+      "type": "video",
+      "videoId": 10172123
+    },
+    "3s0czw5l3": {
+      "slug": "3s0czw5l3",
+      "name": "Acknowledgments",
+      "type": "reading_material",
+      "videoId": null
+    },
+    "79cpr2i": {
+      "slug": "79cpr2i",
+      "name": "Join the DeepLearning.AI Forum to ask questions, get support, or share amazing ideas!",
+      "type": "reading_material",
+      "videoId": null
+    }
+  },
+  "listing": [
+    {
+      "moduleLabel": "Module 1",
+      "name": "Introduction to Agentic Workflows",
+      "content": [
+        {
+          "key": "pu5xbv",
+          "type": "lesson"
+        },
+        {
+          "key": "nae3i1",
+          "type": "lesson"
+        },
+        {
+          "key": "zqs9ty",
+          "type": "lesson"
+        },
+        {
+          "key": "k2vehc",
+          "type": "lesson"
+        },
+        {
+          "key": "bvuwkr",
+          "type": "lesson"
+        },
+        {
+          "key": "moivygo8",
+          "type": "lesson"
+        },
+        {
+          "key": "46yh5j",
+          "type": "lesson"
+        },
+        {
+          "key": "rm9bg7",
+          "type": "lesson"
+        },
+        {
+          "key": "bvuwky83",
+          "type": "lesson"
+        },
+        {
+          "key": "rm9bgm2",
+          "type": "lesson"
+        },
+        {
+          "key": "608l3k05",
+          "type": "lesson"
+        },
+        {
+          "key": "79cpr2i",
+          "type": "lesson"
+        }
+      ]
+    },
+    {
+      "moduleLabel": "Module 2",
+      "name": "Reflection Design Pattern",
+      "content": [
+        {
+          "key": "shknq1",
+          "type": "lesson"
+        },
+        {
+          "key": "uz37v2",
+          "type": "lesson"
+        },
+        {
+          "key": "moivym",
+          "type": "lesson"
+        },
+        {
+          "key": "hl2ajxys",
+          "type": "lesson"
+        },
+        {
+          "key": "vtzr25",
+          "type": "lesson"
+        },
+        {
+          "key": "txqmf0",
+          "type": "lesson"
+        },
+        {
+          "key": "zqs9teds",
+          "type": "lesson"
+        },
+        {
+          "key": "bvuwkhy",
+          "type": "lesson"
+        },
+        {
+          "key": "hl2ajsys",
+          "type": "lesson"
+        }
+      ]
+    },
+    {
+      "moduleLabel": "Module 3",
+      "name": "Tool use",
+      "content": [
+        {
+          "key": "3s0czq",
+          "type": "lesson"
+        },
+        {
+          "key": "79cpry",
+          "type": "lesson"
+        },
+        {
+          "key": "154qpw",
+          "type": "lesson"
+        },
+        {
+          "key": "jcl17b67",
+          "type": "lesson"
+        },
+        {
+          "key": "op1t8nc1",
+          "type": "lesson"
+        },
+        {
+          "key": "a4gs14",
+          "type": "lesson"
+        },
+        {
+          "key": "x7jowg",
+          "type": "lesson"
+        },
+        {
+          "key": "uz37vtv",
+          "type": "lesson"
+        },
+        {
+          "key": "gymk403p",
+          "type": "lesson"
+        }
+      ]
+    },
+    {
+      "moduleLabel": "Module 4",
+      "name": "Practical Tips for Building Agentic AI",
+      "content": [
+        {
+          "key": "pu5xbl",
+          "type": "lesson"
+        },
+        {
+          "key": "2ftglp",
+          "type": "lesson"
+        },
+        {
+          "key": "0kbds1",
+          "type": "lesson"
+        },
+        {
+          "key": "fwxyds",
+          "type": "lesson"
+        },
+        {
+          "key": "nae3i1ymg",
+          "type": "lesson"
+        },
+        {
+          "key": "ldf4ci",
+          "type": "lesson"
+        },
+        {
+          "key": "154qpa",
+          "type": "lesson"
+        },
+        {
+          "key": "hl2aj7",
+          "type": "lesson"
+        },
+        {
+          "key": "vtzr2m1",
+          "type": "lesson"
+        }
+      ]
+    },
+    {
+      "moduleLabel": "Module 5",
+      "name": "Patterns for Highly Autonomous Agents",
+      "content": [
+        {
+          "key": "jcl177",
+          "type": "lesson"
+        },
+        {
+          "key": "wr78er",
+          "type": "lesson"
+        },
+        {
+          "key": "egr0a8",
+          "type": "lesson"
+        },
+        {
+          "key": "zqs9ti2dp",
+          "type": "lesson"
+        },
+        {
+          "key": "608l3n",
+          "type": "lesson"
+        },
+        {
+          "key": "bvuwkh283",
+          "type": "lesson"
+        },
+        {
+          "key": "gymk4l",
+          "type": "lesson"
+        },
+        {
+          "key": "txqmfi1",
+          "type": "lesson"
+        },
+        {
+          "key": "2ftgl7c",
+          "type": "lesson"
+        },
+        {
+          "key": "qjhixk",
+          "type": "lesson"
+        },
+        {
+          "key": "3s0czw5l3",
+          "type": "lesson"
+        }
+      ]
+    }
+  ]
+}

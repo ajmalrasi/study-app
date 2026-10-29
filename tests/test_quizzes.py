@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import re
+import sqlite3
 import tempfile
 import unittest
 import uuid
@@ -16,10 +17,15 @@ class QuizAPI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="study-quiz-tests-")
+        with sqlite3.connect(Path(cls.temp.name)/'notes.db') as c:
+            c.execute('CREATE TABLE course_curricula (course_id INTEGER PRIMARY KEY,platform_course_id TEXT,item_count INTEGER,synced REAL)')
+            c.execute("INSERT INTO course_curricula VALUES (999,'123',5,1)")
         with patch.dict(os.environ, {"NOTES_DATA": cls.temp.name, "QUIZ_WORKER_ENABLED": "0"}):
             spec = importlib.util.spec_from_file_location("quiz_test_app", Path(__file__).parents[1] / "server/app.py")
             cls.app = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(cls.app)
+        with cls.app.db() as c:
+            cls.migrated_platform=c.execute('SELECT platform FROM course_curricula WHERE course_id=999').fetchone()[0]
         cls.client = TestClient(cls.app.app)
 
     def setUp(self):
@@ -249,6 +255,73 @@ class QuizAPI(unittest.TestCase):
         answer=self.client.get('/api/quiz-attempts/'+a['id']).json()['questions'][0]['response']
         self.assertEqual(answer['answer'],'Newer answer')
         self.assertIsNone(answer['feedback'])
+
+    def dlai_payload(self):
+        return {'platform':'deeplearning','platform_course_id':'10074','course_slug':'agentic-ai','course_title':'Agentic AI',
+                'complete':True,'item_count':7,'sections':[
+                    {'id':'module-1','title':'Module 1: Foundations','items':[
+                        {'id':'intro','title':'Welcome!','kind':'video','url':'https://learn.deeplearning.ai/courses/agentic-ai/lesson/intro/welcome!'},
+                        {'id':'reading','title':'Reading','kind':'article','url':'https://learn.deeplearning.ai/courses/agentic-ai/lesson/reading/reading'},
+                        {'id':'quiz','title':'Module quiz','kind':'quiz','url':'https://learn.deeplearning.ai/courses/agentic-ai/lesson/quiz/module-quiz'}]},
+                    {'id':'module-2','title':'Module 2: Reflection','items':[
+                        {'id':'reflect','title':'Reflection','kind':'video','url':'https://learn.deeplearning.ai/courses/agentic-ai/lesson/reflect/reflection'},
+                        {'id':'lab','title':'Lab','kind':'other','url':'https://learn.deeplearning.ai/courses/agentic-ai/lesson/lab/lab'}]}]}
+
+    def test_deeplearning_inventory_preserves_existing_lessons_by_id(self):
+        self.assertEqual(self.migrated_platform,'udemy')
+        old=self.client.post('/api/lessons/resolve',json={'url':'https://learn.deeplearning.ai/courses/agentic-ai/lesson/intro/old-title%3f',
+            'title':'Old title','course_slug':'agentic-ai','course':'Agentic AI','module':'Module 1'}).json()
+        self.client.put(f"/api/lessons/{old['id']}/transcript",json={'vtt':'WEBVTT\n\n00:00:01.000 --> 00:00:33.000\nPlan agentic workflows and evaluate their results.\n'})
+        with self.app.db() as c:
+            c.execute('INSERT INTO notes(id,lesson_id,kind,text,draft) VALUES (?,?,?,?,0)',('dlai-kept-note',old['id'],'text','Keep this personal note'))
+        synced=self.client.put('/api/curriculum',json=self.dlai_payload())
+        self.assertEqual(synced.status_code,200,synced.text)
+        sections=synced.json()['sections']
+        self.assertEqual((sections[0]['available'],sections[0]['videos']),(1,1))
+        found=self.client.get('/api/lessons/by-url',params={'url':self.dlai_payload()['sections'][0]['items'][0]['url']}).json()
+        self.assertEqual(found['id'],old['id'])
+        self.assertEqual(found['notes'][0]['text'],'Keep this personal note')
+        renamed=self.client.post('/api/lessons/resolve',json={'url':self.dlai_payload()['sections'][0]['items'][0]['url'],
+            'title':'Welcome!','course_slug':'agentic-ai','course':'Agentic AI','module':'wrong DOM label'}).json()
+        self.assertEqual(renamed['id'],old['id'])
+        self.assertEqual(renamed['module'],'Module 1: Foundations')
+        self.assertTrue(renamed['has_transcript'])
+        with self.app.db() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM lessons WHERE course_id=?',(synced.json()['course_id'],)).fetchone()[0],1)
+        q=self.create(course_id=synced.json()['course_id'],section_ids=[sections[0]['id']],count=1)
+        self.assertEqual(self.generate(q)['status'],'ready')
+
+    def test_deeplearning_import_claim_contains_provider_and_exact_lesson_url(self):
+        synced=self.client.put('/api/curriculum',json=self.dlai_payload()).json()
+        sid=synced['sections'][1]['id']
+        job=self.client.post('/api/transcript-imports',json={'section_ids':[sid]}).json()
+        self.assertEqual(job['total'],1,'labs are not treated as videos')
+        claim=self.client.post('/api/transcript-imports/claim?course_slug=agentic-ai').json()
+        self.assertEqual(claim['platform'],'deeplearning')
+        self.assertEqual(claim['platform_course_id'],'10074')
+        self.assertEqual(claim['items'][0]['external_id'],'reflect')
+        self.assertIn('/lesson/reflect/',claim['items'][0]['url_key'])
+        no_partial=self.client.post('/api/quizzes',json={'request_id':'dlai-missing','course_id':synced['course_id'],'count':10})
+        self.assertEqual(no_partial.status_code,409)
+
+    def test_deeplearning_rejects_foreign_or_mismatched_lesson_urls(self):
+        for url in ('https://evil.example/courses/agentic-ai/lesson/intro/welcome!',
+                    'https://learn.deeplearning.ai/courses/other/lesson/intro/welcome!',
+                    'https://learn.deeplearning.ai/courses/agentic-ai/lesson/wrong/welcome!',
+                    'https://learn.deeplearning.ai/courses/agentic-ai/lesson/intro/welcome!?token=x'):
+            payload=self.dlai_payload();payload['sections'][0]['items'][0]['url']=url
+            self.assertEqual(self.client.put('/api/curriculum',json=payload).status_code,400)
+        self.assertFalse(any(s['slug']=='agentic-ai' for s in self.client.get('/api/quiz-scopes').json()))
+
+    def test_deeplearning_module_resync_keeps_stable_section_identity(self):
+        payload=self.dlai_payload()
+        first=self.client.put('/api/curriculum',json=payload).json()
+        payload['sections'][0]['title']='Module 1: New title'
+        second=self.client.put('/api/curriculum',json=payload).json()
+        self.assertEqual(first['sections'][0]['id'],second['sections'][0]['id'])
+        scope=next(c for c in self.client.get('/api/quiz-scopes').json() if c['slug']=='agentic-ai')
+        self.assertEqual(scope['inventory']['platform'],'deeplearning')
+        self.assertEqual(len(scope['sections']),2)
 
 
 if __name__ == '__main__':

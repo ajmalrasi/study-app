@@ -1,6 +1,7 @@
 // Shared by the service worker and the side panel: settings, server API, page access,
 // screenshots and the offline queue.
 import { probePage, controlVideo, fetchTranscript, videoTime, fetchUdemyCurriculum, fetchUdemyCaption } from "./page.js";
+import { fetchDlaiCourse } from "./dlai.js";
 import { isSupportedSite } from "./sites.js";
 
 export const DEFAULTS = { serverUrl: "http://192.168.3.20:8765", pauseOnNote: true, autoTranscript: true, resumeAfterDraw: true };
@@ -62,12 +63,19 @@ export const control = (tabId, action, value = null) =>
   });
 export const transcript = (tabId) => run(tabId, fetchTranscript);
 export const udemyCaption = (tabId, courseId, lectureId) => run(tabId, fetchUdemyCaption, [courseId, lectureId]);
+export const courseCaption = (tabId, job, item) => job.platform === "deeplearning"
+  ? run(tabId, fetchDlaiCourse, ["caption", item.url_key]) : udemyCaption(tabId, job.platform_course_id, item.external_id);
 export async function syncCourseSections(tabId, p) {
+  if (p?.platform === "deeplearning") {
+    const data = await run(tabId, fetchDlaiCourse, ["curriculum", p.url]);
+    if (data?.error) throw new Error(data.error);
+    return api("/api/curriculum", { method: "PUT", timeout: 60000, body: data });
+  }
   if (!p?.platformCourseId || !p.courseSlug?.startsWith("udemy-")) throw new Error("Open the signed-in Udemy course and retry.");
   const data = await run(tabId, fetchUdemyCurriculum, [p.platformCourseId]);
   if (data?.error) throw new Error(data.error);
   return api("/api/curriculum", { method: "PUT", timeout: 60000, body: {
-    ...data, platform_course_id: String(p.platformCourseId), course_slug: p.courseSlug, course_title: p.course,
+    ...data, platform: "udemy", platform_course_id: String(p.platformCourseId), course_slug: p.courseSlug, course_title: p.course,
   } });
 }
 export const currentTime = (tabId) => run(tabId, videoTime).catch(() => null);

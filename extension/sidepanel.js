@@ -62,7 +62,7 @@ async function refresh() {
     state.tab = await activeTab();
     state.p = state.tab?.id && /^https?:/.test(state.tab.url || "") ? await probe(state.tab.id) : null;
     const p = state.p;
-    $("#courseQuizTools").hidden = !p?.courseSlug?.startsWith("udemy-");
+    $("#courseQuizTools").hidden = !p?.courseSlug || !["udemy", "deeplearning"].includes(p.platform);
     $("#tools").classList.toggle("disabled-area", !p?.hasVideo);
     $("#composer").classList.toggle("disabled-area", !p?.hasVideo);
     $("#processBtn").disabled = !p?.hasVideo;
@@ -256,7 +256,7 @@ $("#openQuizzesBtn").onclick = () => chrome.tabs.create({ url: `${state.serverUr
 $("#syncSectionsBtn").onclick = async () => {
   const button = $("#syncSectionsBtn"), output = $("#courseSyncState");
   button.disabled = true;
-  output.textContent = "Reading every curriculum page… Keep this Udemy tab open.";
+  output.textContent = "Reading the complete course outline… Keep this course tab open.";
   try {
     const reply = await chrome.runtime.sendMessage({ type: "sync-course-sections", tabId: state.tab.id });
     if (reply.error) throw new Error(reply.error);

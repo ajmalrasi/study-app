@@ -9,6 +9,7 @@ import re
 import threading
 import time
 import uuid
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field
@@ -16,7 +17,8 @@ from pydantic import BaseModel, Field
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS course_curricula (
- course_id INTEGER PRIMARY KEY, platform_course_id TEXT, item_count INTEGER, synced REAL);
+ course_id INTEGER PRIMARY KEY, platform_course_id TEXT, item_count INTEGER, synced REAL,
+ platform TEXT DEFAULT 'udemy');
 CREATE TABLE IF NOT EXISTS course_sections (
  id INTEGER PRIMARY KEY, course_id INTEGER, external_id TEXT, title TEXT, position INTEGER,
  active INTEGER DEFAULT 1, UNIQUE(course_id,external_id));
@@ -59,6 +61,7 @@ class CurriculumItem(BaseModel):
     id: str = Field(min_length=1, max_length=100)
     title: str = Field(min_length=1, max_length=500)
     kind: str = Field(pattern="^(video|article|quiz|other)$")
+    url: str | None = Field(default=None, max_length=2000)
 
 
 class CurriculumSection(BaseModel):
@@ -68,8 +71,9 @@ class CurriculumSection(BaseModel):
 
 
 class CurriculumIn(BaseModel):
+    platform: str = Field(default="udemy", pattern="^(udemy|deeplearning)$")
     platform_course_id: str = Field(pattern=r"^\d+$")
-    course_slug: str = Field(pattern=r"^udemy-[a-zA-Z0-9_-]+$")
+    course_slug: str = Field(pattern=r"^[a-zA-Z0-9_-]+$")
     course_title: str = Field(min_length=1, max_length=500)
     sections: list[CurriculumSection] = Field(min_length=1, max_length=1000)
     item_count: int = Field(ge=1, le=20000)
@@ -148,6 +152,8 @@ def install_quizzes(app, services):
     services["quiz_wakeup"] = wakeup
     with db() as c:
         c.executescript(SCHEMA)
+        if "platform" not in [r[1] for r in c.execute("PRAGMA table_info(course_curricula)")]:
+            c.execute("ALTER TABLE course_curricula ADD COLUMN platform TEXT DEFAULT 'udemy'")
         c.execute("UPDATE quizzes SET status='queued', step='Resuming after restart' WHERE status='running'")
 
     def one(c, table, key):
@@ -177,8 +183,17 @@ def install_quizzes(app, services):
         item_keys = [(i.kind, i.id) for s in body.sections for i in s.items]
         if len(set(section_ids)) != len(section_ids) or len(set(item_keys)) != len(item_keys):
             raise HTTPException(400, "The curriculum contains duplicate identifiers.")
-        if any(not i.id.isdigit() for s in body.sections for i in s.items):
+        if body.platform == "udemy" and (not body.course_slug.startswith("udemy-") or any(not i.id.isdigit() for s in body.sections for i in s.items)):
             raise HTTPException(400, "Udemy lesson identifiers must be numeric.")
+        if body.platform == "deeplearning":
+            if body.course_slug.startswith("udemy-"):
+                raise HTTPException(400, "This course slug is reserved for Udemy.")
+            for section in body.sections:
+                for item in section.items:
+                    parsed = urlsplit(item.url or "")
+                    expected = rf"/courses/{re.escape(body.course_slug)}/lesson/{re.escape(item.id)}/[^/]+/?"
+                    if not re.fullmatch(r"[a-zA-Z0-9_-]+", item.id) or parsed.scheme != "https" or parsed.netloc != "learn.deeplearning.ai" or parsed.query or parsed.fragment or not re.fullmatch(expected, parsed.path):
+                        raise HTTPException(400, "A DeepLearning.AI lesson URL does not match its course and stable lesson ID.")
         slug = body.course_slug.removeprefix("udemy-")
         now = time.time()
         with db() as c:
@@ -187,9 +202,9 @@ def install_quizzes(app, services):
                 title=CASE WHEN courses.title_custom=1 THEN courses.title ELSE excluded.title END""",
                       (body.course_slug, body.course_title))
             cid = c.execute("SELECT id FROM courses WHERE slug=?", (body.course_slug,)).fetchone()[0]
-            existing = c.execute("SELECT platform_course_id FROM course_curricula WHERE course_id=?", (cid,)).fetchone()
-            if existing and existing[0] != body.platform_course_id:
-                raise HTTPException(409, "This course was previously linked to a different Udemy course ID.")
+            existing = c.execute("SELECT platform_course_id,platform FROM course_curricula WHERE course_id=?", (cid,)).fetchone()
+            if existing and (existing[0] != body.platform_course_id or existing[1] != body.platform):
+                raise HTTPException(409, "This course was previously linked to a different platform or course ID.")
             c.execute("UPDATE course_sections SET active=0 WHERE course_id=?", (cid,))
             c.execute("UPDATE curriculum_items SET active=0 WHERE course_id=?", (cid,))
             for pos, section in enumerate(body.sections):
@@ -198,15 +213,19 @@ def install_quizzes(app, services):
                           (cid, section.id, section.title, pos))
                 sid = c.execute("SELECT id FROM course_sections WHERE course_id=? AND external_id=?", (cid, section.id)).fetchone()[0]
                 for index, item in enumerate(section.items):
-                    url = f"https://www.udemy.com/course/{slug}/learn/{'quiz' if item.kind == 'quiz' else 'lecture'}/{item.id}"
+                    url = item.url if body.platform == "deeplearning" else f"https://www.udemy.com/course/{slug}/learn/{'quiz' if item.kind == 'quiz' else 'lecture'}/{item.id}"
+                    saved = services["find_lesson_by_source"](c, url)
+                    if saved:
+                        url = saved["url_key"]
                     c.execute("""INSERT INTO curriculum_items(course_id,section_id,external_id,kind,title,url_key,position)
                         VALUES (?,?,?,?,?,?,?) ON CONFLICT(course_id,kind,external_id) DO UPDATE SET
                         section_id=excluded.section_id,title=excluded.title,url_key=excluded.url_key,
                         position=excluded.position,active=1""", (cid, sid, item.id, item.kind, item.title, url, index))
                     c.execute("UPDATE lessons SET module=? WHERE course_id=? AND url_key=?", (section.title, cid, url))
-            c.execute("""INSERT INTO course_curricula VALUES (?,?,?,?) ON CONFLICT(course_id) DO UPDATE SET
-                platform_course_id=excluded.platform_course_id,item_count=excluded.item_count,synced=excluded.synced""",
-                      (cid, body.platform_course_id, body.item_count, now))
+            c.execute("""INSERT INTO course_curricula(course_id,platform_course_id,item_count,synced,platform) VALUES (?,?,?,?,?)
+                ON CONFLICT(course_id) DO UPDATE SET platform_course_id=excluded.platform_course_id,
+                item_count=excluded.item_count,synced=excluded.synced,platform=excluded.platform""",
+                      (cid, body.platform_course_id, body.item_count, now, body.platform))
             return {"course_id": cid, "sections": sections_out(c, cid), "synced": now}
 
     @app.get("/api/quiz-scopes")
@@ -263,9 +282,9 @@ def install_quizzes(app, services):
             token = uuid.uuid4().hex
             c.execute("UPDATE transcript_imports SET status='running',lease=?,lease_until=?,updated=? WHERE id=?",
                       (token, time.time() + 120, time.time(), row["id"]))
-            inventory = c.execute("SELECT platform_course_id FROM course_curricula WHERE course_id=?", (row["course_id"],)).fetchone()
+            inventory = c.execute("SELECT platform_course_id,platform FROM course_curricula WHERE course_id=?", (row["course_id"],)).fetchone()
             return {**import_out(c, one(c, "transcript_imports", row["id"])), "lease": token,
-                    "platform_course_id": inventory[0]}
+                    "platform_course_id": inventory[0], "platform": inventory[1]}
 
     @app.post("/api/transcript-imports/{import_id}/items/{item_id}")
     def report_import(import_id: str, item_id: int, body: ImportReport):

@@ -1,6 +1,6 @@
 import {
   activeTab, addBookmark, addNote, api, captureAndDraw, captureVideo, control, enqueue, flush, fmtT, probe, saveQuote, settings,
-  syncTranscript, toast, syncCourseSections, udemyCaption,
+  syncTranscript, toast, syncCourseSections, courseCaption,
 } from "./lib.js";
 import { isSupportedSite, isLessonUrl } from "./sites.js";
 
@@ -38,16 +38,16 @@ async function processCourseImports() {
   if (importing) return;
   importing = true;
   try {
-    const tabs = await chrome.tabs.query({ url: ["https://*.udemy.com/course/*"] });
+    const tabs = await chrome.tabs.query({ url: ["https://*.udemy.com/course/*", "https://learn.deeplearning.ai/courses/*"] });
     for (const tab of tabs) {
       const p = await probe(tab.id);
-      if (!p?.courseSlug?.startsWith("udemy-")) continue;
+      if (!p?.courseSlug || !["udemy", "deeplearning"].includes(p.platform)) continue;
       const job = await api(`/api/transcript-imports/claim?course_slug=${encodeURIComponent(p.courseSlug)}`, { method: "POST" });
       if (!job) continue;
       for (const item of job.items.filter(i => i.status === "pending")) {
         let status = "saved", error = "";
         try {
-          const caption = await udemyCaption(tab.id, job.platform_course_id, item.external_id);
+          const caption = await courseCaption(tab.id, job, item);
           if (caption?.error) {
             status = caption.noCaptions ? "no_captions" : "error";
             error = caption.error;
@@ -134,7 +134,7 @@ chrome.windows.onRemoved.addListener(async (winId) => {
 const autoSaving = new Map(); // tabId -> lesson URL being saved
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if ((info.url || info.status === "complete") && isLessonUrl(tab.url)) autoSaveTranscript(tabId, tab.url);
-  if (info.status === "complete" && /^https:\/\/[^/]*udemy\.com\/course\//.test(tab.url || "")) processCourseImports();
+  if (info.status === "complete" && isSupportedSite(tab.url) && /^\/(?:course|courses)\//.test(new URL(tab.url).pathname)) processCourseImports();
 });
 
 async function autoSaveTranscript(tabId, url) {
