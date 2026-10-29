@@ -1,5 +1,5 @@
 // The library owns quizzes; each practice run owns a separate durable attempt.
-export function createQuizWorkspace({ api, esc, icon, fmt, videoLink, setPage, setBreadcrumb, navigate, toast }) {
+export function createQuizWorkspace({ api, uid, esc, icon, fmt, videoLink, setPage, setBreadcrumb, navigate, toast }) {
   let active = false, poll, draftTimer, scopes = [], quiz = null, attempt = null, index = 0;
   let courseId = null, busy = false, saving = Promise.resolve(), createRequest = null, viewKey = '';
   const $ = (s) => document.querySelector(s);
@@ -216,7 +216,7 @@ export function createQuizWorkspace({ api, esc, icon, fmt, videoLink, setPage, s
         const s = selection(), count = Number($('#q-count').value);
         if (!s.total || !s.available) throw new Error('Choose lessons with available transcripts.');
         if (!Number.isInteger(count) || count < 1 || count > 100) throw new Error('Choose 1–100 questions.');
-        createRequest ??= crypto.randomUUID();
+        createRequest ??= uid();
         $('#q-create-status').textContent = 'Saving your selection and transcript evidence…';
         const q = await api('/api/quizzes',{method:'POST',body:{request_id:createRequest,title:$('#q-title').value,
           count,kind:$('#q-kind').value,allow_partial:$('#q-partial').checked,
@@ -235,7 +235,7 @@ export function createQuizWorkspace({ api, esc, icon, fmt, videoLink, setPage, s
         await detail(quiz.id);
       } else if (name === 'start' || name === 'retake' || name === 'missed') {
         const qid = attempt?.quiz_id || quiz.id;
-        const a = await api(`/api/quizzes/${qid}/attempts`,{method:'POST',body:{request_id:crypto.randomUUID(),...(name === 'missed' ? {missed_from:attempt.id} : {})}});
+        const a = await api(`/api/quizzes/${qid}/attempts`,{method:'POST',body:{request_id:uid(),...(name === 'missed' ? {missed_from:attempt.id} : {})}});
         navigate('#quizzes?attempt='+a.id);
       } else if (name === 'save') {
         captureDraft(); await saveDraft(); toast('Answer saved.');

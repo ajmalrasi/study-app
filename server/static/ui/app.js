@@ -1435,7 +1435,7 @@ function setDrawer(open) {
     $(".drawer-close")?.focus();
   } else $("#menu-toggle").focus();
 }
-const quizWorkspace = createQuizWorkspace({ api, esc, icon, fmt, videoLink, setPage, setBreadcrumb, navigate, toast });
+const quizWorkspace = createQuizWorkspace({ api, uid, esc, icon, fmt, videoLink, setPage, setBreadcrumb, navigate, toast });
 async function route() {
   await quizWorkspace.leave();
   savePosition();
