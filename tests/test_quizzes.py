@@ -159,6 +159,62 @@ class QuizAPI(unittest.TestCase):
         result = self.client.get('/api/quizzes/'+quiz['id']).json()
         self.assertEqual(result['question_count'],4)
 
+    def test_generation_accepts_named_arrays_and_fenced_json(self):
+        original = self.model
+        def wrapped(prompt, material, *args):
+            key = 'topics' if 'Extract up to' in prompt else 'verdicts' if 'Validate the proposed' in prompt else 'questions'
+            return '```json\n' + json.dumps({key: json.loads(original(prompt, material, *args))}) + '\n```'
+        with patch.object(self, 'model', side_effect=wrapped):
+            result = self.generate(self.create())
+        self.assertEqual((result['question_count'], result['status']), (4, 'ready'))
+
+    def test_generation_retries_single_question_objects_and_invalid_json(self):
+        original = self.model
+        failures = []
+        def malformed(prompt, material, *args):
+            result = original(prompt, material, *args)
+            if 'Create one original' in prompt and len(failures) < 2:
+                failures.append((prompt, material))
+                return json.dumps(json.loads(result)[0]) if len(failures) == 1 else '{"questions":['
+            return result
+        with patch.object(self, 'model', side_effect=malformed):
+            result = self.generate(self.create())
+        self.assertEqual((result['question_count'], result['status']), (4, 'ready'))
+        self.assertEqual(len(failures), 2)
+        self.assertIn('FORMAT CORRECTION', failures[1][0])
+        self.assertEqual(failures[0][1], failures[1][1], 'retry retains the original evidence and tasks')
+
+    def test_invalid_json_retries_are_bounded_and_resume_keeps_processed_sources(self):
+        original = self.model
+        failures = []
+        def malformed(prompt, material, *args):
+            if 'Create one original' in prompt:
+                failures.append(prompt)
+                return '{"unrelated":[]}'
+            return original(prompt, material, *args)
+        quiz = self.create()
+        with patch.object(self, 'model', side_effect=malformed):
+            with self.assertRaisesRegex(ValueError, 'invalid questions JSON after 3 attempts'):
+                self.generate(quiz)
+        self.assertEqual(len(failures), 3)
+        detail = self.client.get('/api/quizzes/' + quiz['id']).json()
+        self.assertEqual((detail['processed_chunks'], detail['question_count']), (2, 0))
+        self.calls.clear()
+        result = self.generate(quiz)
+        self.assertEqual(result['question_count'], 4)
+        self.assertFalse(any('Extract up to' in prompt for prompt, _ in self.calls))
+
+    def test_wrapped_verdicts_still_reject_unsupported_questions(self):
+        original = self.model
+        def reject(prompt, material, *args):
+            if 'Validate the proposed' in prompt:
+                return json.dumps({'verdicts': [{'topic_key': q['topic_key'], 'supported': False}
+                                               for q in json.loads(material)['questions']]})
+            return original(prompt, material, *args)
+        with patch.object(self, 'model', side_effect=reject):
+            result = self.generate(self.create())
+        self.assertEqual((result['question_count'], result['status']), (0, 'error'))
+
     def test_mcq_attempts_hide_answers_grade_deterministically_and_preserve_history(self):
         quiz = self.create(count=2,kind="mcq")
         self.generate(quiz)
