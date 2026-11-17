@@ -1,189 +1,91 @@
 # Study Notes
 
-Take notes while watching course videos (DeepLearning.AI and Udemy lecture pages), with timestamps,
-screenshots and Excalidraw drawings. Your local LLM on the Jetson then turns them into study notes
-and flashcards.
+Study Notes is a self-hosted study app for **Udemy** and **DeepLearning.AI** courses. Capture timestamped notes, quotes, screenshots, and Excalidraw sketches from a Chrome side panel. In the web workspace, revisit the exact moment in a lesson, search across transcripts and notes, review flashcards, and take quizzes backed by lesson excerpts.
 
-```
-Chrome extension (Mac/Linux)  ──►  Raspberry Pi :8765 (server, data, review page, Excalidraw)
-                                          │
-                                          ▼
-                               Jetson :11434 (LLM, OpenAI API)
-```
+![Study Notes overview showing the course library, a recent lesson, and flashcards due for review](docs/previews/ultrawide-home-paper.png)
 
-- **Server**: `http://192.168.3.20:8765` (review page, works on your phone over home Wi-Fi)
-- **LLM**: `http://192.168.3.30:11434/v1/chat/completions`, model `openclaw` (only called, never modified)
-- Design and decisions: [docs/DESIGN.md](docs/DESIGN.md)
+## Run locally
 
-## Install the Chrome extension (once per computer)
+You’ll need Chrome and Python 3.10+ with SQLite FTS5. Install Node.js and npm if you want to build the drawing editor or run the JavaScript tests.
 
 ```bash
-git clone https://github.com/ajmalrasi/study-app.git ~/tgs/study-app
+git clone https://github.com/ajmalrasi/study-app.git
+cd study-app
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r server/requirements.txt
+python -m uvicorn server.app:app --port 8765 --reload
 ```
 
-1. Open `chrome://extensions` and turn on **Developer mode** (top right).
-2. Click **Load unpacked** and pick `~/tgs/study-app/extension`.
-3. Pin it from the puzzle-piece menu. Clicking the icon opens the side panel.
-4. Optional: change hotkeys at `chrome://extensions/shortcuts`.
+Open [the study workspace](http://localhost:8765). The server creates its data directory on first run. Capture, transcript reading, and search work without a model. To generate study notes, flashcards, quizzes, or answers in **Ask your notes**, set `LLM_URL` to the full `/v1/chat/completions` URL of a reachable OpenAI-compatible endpoint and `LLM_MODEL` to its model ID before starting the server. The server sends requests without an API key. `/api/health` reports server status and checks the model host’s `/health` route.
 
-**Update:** `git -C ~/tgs/study-app pull`, then click ↻ on Study Notes in `chrome://extensions`.
-
-## Udemy
-
-Open an enrolled lecture (`/course/<course>/learn/lecture/<id>`), then open Study Notes.
-Course landing pages and their promotional previews are not lecture pages. Notes are grouped
-by course and lecture; coupon and playback query parameters are removed from saved links.
-Automatic transcripts read the current lecture's captions through your signed-in Udemy
-session, including players that do not expose native subtitle tracks. Availability depends
-on captions being provided for that lecture; English is preferred when available.
-
-## While watching
-
-Study Notes is available only on Udemy and `learn.deeplearning.ai`. Open it with
-the toolbar icon on your lesson. It hides on other sites and returns when you
-switch back to a lesson where it was open. Notes-server pages remain accessible
-through Open and Search / Ask, but do not activate the extension panel.
-
-With **Save every lesson's transcript automatically** enabled, loading a lesson
-in a background tab can save its available subtitles even while the panel is
-hidden. This does not crawl a course, record audio or video, or take automatic
-screenshots. Turn that setting off to stop automatic transcript saving.
-
-The extension has required website access only to the two learning sites and
-the default local notes server. A custom server requests access to that server
-when you save its address. Screenshots use temporary access granted by clicking
-the toolbar icon on the lesson or pressing the screenshot shortcut.
-
-| Key (Mac: Option) | What it does |
-|---|---|
-| `Alt+N` | Note box over the video at the current time (video pauses, Enter saves and resumes, tick ⭐ for important) |
-| `Alt+S` | Screenshot of the video, saved as a note |
-| `Alt+D` | Screenshot, then opens Excalidraw to draw on it |
-| `Alt+B` | Bookmark the moment as important |
-| *(set a key)* | Save quote: saves what's being said right now. Assign a key at `chrome://extensions/shortcuts` |
-
-Side panel: type notes (timestamped when you *start* typing), click a timestamp to jump the
-video, click a note to edit it, use **🖊 Sketch** for a blank drawing, and **✨ Process lesson**
-when you finish.
-
-**Transcripts:** every lesson video you open has its transcript saved automatically, even
-without notes (turn off in ⚙). The side panel's **Transcript** tab follows the video: the
-current line is highlighted, clicking a line jumps there, and selecting text gives
-**💬 Save as note**. The **💬 Quote** button saves the last few seconds of what was said.
-
-If the Pi is unreachable, notes are kept in the browser and sync automatically later
-("⏳ N changes waiting to sync").
-
-## After the lesson
-
-**✨ Process lesson** sends your notes plus the lesson transcript (fetched automatically from
-the video's subtitles) to the Jetson LLM and produces:
-- study notes: summary, key concepts with timestamps, "what I might have missed", questions
-- 6–10 flashcards linked to the moment in the video
-
-Lessons you only watched can be processed too (summary + flashcards from the transcript).
-
-Open `http://192.168.3.20:8765` to:
-- **Search** every saved transcript and your notes, with results linking to the exact moment
-- **✨ Ask** a question: the Jetson answers from your lessons with cited sources
-- read each lesson's **Transcript** with your notes and drawings placed where you took them
-- edit drawings and review flashcards (spaced repetition)
-
-Video links open the lesson at the selected moment.
-
-The review workspace includes course/module navigation, a resume-reading overview, scoped
-search, and short flashcard sessions with real next-review intervals and undo. Study-note
-timestamps reveal the source passage; you can then read it in the transcript or open the
-video. Captures open in a zoomable preview, with a separate action to edit their drawings.
-Paper, Evening, and System appearances and a comfortable reading size are available in
-**Reading & appearance**. Reading positions and answer drafts are saved in that browser.
-
-## Quizzes across lessons
-
-Open **Quizzes** in the notes website to create a saved quiz with 1–100 written-answer or
-multiple-choice questions. Choose a whole course, one or more sections, or an explicit set
-of saved lessons. Quizzes and every attempt are stored on the server, including draft answers,
-feedback, results, and the original transcript evidence. You can resume an attempt, retake a
-quiz, or practise questions you missed without replacing earlier results.
-
-For Udemy sections or DeepLearning.AI modules:
-
-1. Open the signed-in course in Chrome, with Study Notes 0.5.0 or later loaded.
-2. Open the extension and click **Sync course sections**. Every Udemy curriculum page is
-   checked; DeepLearning.AI's complete lesson inventory is checked against every module's
-   contents. Existing lessons are grouped using their stable lesson IDs.
-3. On **Quizzes**, select the course and sections. The page lists available and missing video
-   transcripts separately from articles, quizzes, and other items.
-4. Click **Fetch missing transcripts**, keeping that course tab open. The extension
-   checks the queue within a minute and fetches captions through the signed-in browser without
-   playing the lessons. Refresh coverage after the import finishes. Sign-in errors and videos
-   without captions remain listed; another import retries missing items.
-5. Choose the question count and format, then create the quiz. Missing transcripts block
-   creation unless you explicitly allow a partial quiz.
-
-Generation runs in the background and resumes saved work after a restart. It processes
-**every included transcript chunk**, plans questions across lessons, retrieves related evidence
-within the selection, and asks the model to verify each batch. A quiz is labelled **Partial
-coverage** if transcripts are missing, lessons have no questions, or fewer supported questions
-were generated than requested. A small question count cannot guarantee every lesson is tested.
-The coverage view shows exactly which lessons are represented.
-
-Retrieval currently uses keyword search over the quiz's source snapshots. Semantic embeddings
-are not required. Updating or deleting a lesson does not change an existing quiz's evidence;
-the coverage view flags source changes. Create a new quiz to use updated transcripts.
-
-DeepLearning.AI videos are imported from each lesson's caption metadata without playing the
-video. Readings, labs, and existing quizzes are listed as non-video items. A changed lesson
-title or URL slug retains the saved lesson and notes through its stable ID. Course formats
-that cannot be completely verified fail explicitly rather than saving an incomplete outline.
-Quiz data is included in the existing SQLite backups.
-
-Verification: `python3 -m unittest discover -s tests -p 'test*.py'` and
-`node tests/udemy_curriculum.mjs`, `node tests/dlai_curriculum.mjs`, in addition to the
-existing extension checks.
-
-## Data
-
-On the Pi under `~/apps/study_notes/data/`:
-- `notes.db`: SQLite
-- `files/`: screenshots, drawing PNGs and `.excalidraw` scenes
-- `markdown/<course>/`: a plain markdown copy of every lesson (Obsidian-friendly)
-
-Snapshot nightly at 03:30 to `~/backups/study_notes/` (14 days kept).
-
-## Develop & deploy
+To enable Excalidraw, run this from the repository root in a separate terminal. The build is served at `/draw/`.
 
 ```bash
-deploy/deploy.sh            # build Excalidraw editor, rsync to the Pi, restart the service
-deploy/push-extension.sh    # alternative to git: rsync the extension to 192.168.3.210 over SSH
+npm --prefix draw ci
+npm --prefix draw run build
 ```
 
-Local dev: `cd server && NOTES_DATA=/tmp/study-notes-dev uvicorn app:app --port 8765 --reload`
-and set the extension's server URL (⚙ in the side panel) to `http://localhost:8765`.
-The editor is in `draw/` (`npm run build` writes to `server/static/draw/`).
+### Load the Chrome extension
 
-On the Pi: `systemctl --user status study-notes` · logs: `journalctl --user -u study-notes -f`.
-LLM settings: `~/.config/study-notes.env` (`LLM_URL`, `LLM_MODEL`).
+1. Open `chrome://extensions` and enable **Developer mode**.
+2. Select **Load unpacked** and choose the repository’s `extension/` folder.
+3. Open a lesson on `learn.deeplearning.ai` or an enrolled Udemy lecture. Click the **Study Notes** toolbar icon and open the side panel’s settings.
+4. Set the server URL to `http://localhost:8765` for local development, or to the address of your deployed server, then click **Save**. Chrome may ask for access to a custom server’s origin.
 
-The review UI is plain HTML, CSS, and JavaScript in `server/static/ui/`, with locally served
-SVG icons and favicons. Design and behavior: [docs/UI_DESIGN.md](docs/UI_DESIGN.md).
+After pulling updates, reload **Study Notes** on `chrome://extensions` and refresh the lesson tab.
 
-API checks (use an isolated temporary database automatically):
+## Capture and review a lesson
+
+- **While watching**, type in the side panel to anchor the note at the time you start typing. In **Transcript**, click a caption to seek or select text to save it as a note. Chrome queues unsynced notes and retries when the server is reachable. Drawing requires a server connection.
+- **Save captions** automatically from loaded lessons with **Save every lesson's transcript automatically** enabled by default. Caption availability depends on the course and your browser session. Use course transcript import when you want to fetch captions across multiple lessons.
+- **Generate study material** with **Process lesson** in the extension. It uses the transcript and any notes to produce a summary, timestamped key concepts, and flashcards. In **Library**, **Generate all** queues eligible lessons in a course.
+- **Review on the web** with notes, captures, and transcripts in context. Search for a passage or use **Ask your notes** for answers with source links. **Review** schedules flashcards with spaced repetition and lets you undo a review.
+
+| Default shortcut (Option on Mac) | Action |
+| --- | --- |
+| `Alt+N` | Open a quick note at the current timestamp |
+| `Alt+S` | Save a screenshot |
+| `Alt+D` | Capture a screenshot and open it in Excalidraw |
+| `Alt+B` | Bookmark the current moment |
+
+Use the side panel’s **Quote** button to save a recent caption. Shortcut bindings, including an optional one for **Quote**, are available at `chrome://extensions/shortcuts`.
+
+## Create a quiz
+
+1. For a whole course or specific Udemy sections or DeepLearning.AI modules, open a lesson in signed-in Chrome and select **Sync course sections** in the extension. You can also build a quiz from individual saved lessons.
+2. In the web workspace, open **Quizzes** and choose your scope. Select **Fetch missing transcripts** if needed. Keep the signed-in course tab open while the extension imports available captions without playing the videos.
+3. Choose 1–100 questions and a format, either multiple choice or written answer. Missing transcripts require explicit approval to create a partial quiz. The coverage view shows missing transcripts and which lessons the generated questions represent.
+4. Start an attempt when generation finishes. Draft answers, feedback, and results are saved on the server. You can resume, retake, or practise missed questions while keeping earlier attempts.
+
+Each quiz keeps a copy of its source excerpts so the original evidence stays available when a transcript changes.
+
+## Data and deployment
+
+The FastAPI server stores data in `server/data/` by default. Set `NOTES_DATA` to use a different directory. `notes.db` holds the SQLite database, `files/` contains screenshots and drawings, and `markdown/` contains per-lesson exports.
+
+The bundled deployment runs the web workspace and API on a Raspberry Pi and uses a separate Jetson for model inference. The extension defaults to the Pi at `http://192.168.3.20:8765`. The server is intended for a trusted network and serves the workspace and API without authentication.
 
 ```bash
-python3 -m pip install -r server/requirements-dev.txt
-python3 -m unittest discover -s tests -v
+deploy/deploy.sh            # Build the editor and deploy to the default rpi SSH host
+# deploy/deploy.sh my-pi    # Use a different SSH host
 ```
 
-### Generate a whole course
+The deployment installs the user-level `study-notes` service and a nightly backup timer. The Pi stores app data under `~/apps/study_notes/data/` and snapshots it to `~/backups/study_notes/` at 03:30, retaining roughly two weeks of backups. Set `LLM_URL` and `LLM_MODEL` in `~/.config/study-notes.env` on the Pi. Check the service with `systemctl --user status study-notes` or follow its logs with `journalctl --user -u study-notes -f`.
 
-In Library, each course has **Generate all · N** for saved lessons with notes or a
-transcript that still need study material. It queues summaries and flashcards using
-the existing one-at-a-time worker. Completed lessons and active jobs are skipped;
-failed unprocessed lessons can be retried. Repeated clicks do not duplicate jobs.
-You can leave the page while generation runs. Use **Refresh** beside the generating
-count to update statuses.
+## Development checks
 
-Validation: 12 API tests, including course scoping, skipping completed/active/empty/
-draft-only lessons, failed-job retry and concurrent duplicate submissions. Live
-browser verification confirmed the course button and eligible count.
+Run from the repository root with the Python environment activated. The API tests create temporary databases.
+
+```bash
+python -m pip install -r server/requirements-dev.txt
+python -m unittest discover -s tests -v
+for suite in tests/*.mjs; do node "$suite" || exit 1; done
+```
+
+- `extension/` contains the Chrome capture UI and course adapters.
+- `server/` contains the API, quiz engine, and web workspace.
+- `draw/` contains the Excalidraw editor.
+- `deploy/` contains deployment, service, and backup scripts.
+
+See the [review workspace design](docs/UI_DESIGN.md), [quiz engine notes](docs/SECTION_QUIZZES.md), and [DeepLearning.AI import details](docs/DEEPLEARNING_QUIZZES.md) for implementation context.
