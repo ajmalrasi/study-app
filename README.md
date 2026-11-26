@@ -17,7 +17,7 @@ python -m pip install -r server/requirements.txt
 python -m uvicorn server.app:app --port 8765 --reload
 ```
 
-Open [the study workspace](http://localhost:8765). The server creates its data directory on first run. Capture, transcript reading, and search work without a model. To generate study notes, flashcards, quizzes, or answers in **Ask your notes**, set `LLM_URL` to the full `/v1/chat/completions` URL of a reachable OpenAI-compatible endpoint and `LLM_MODEL` to its model ID before starting the server. The server sends requests without an API key. `/api/health` reports server status and checks the model host’s `/health` route.
+Open [the study workspace](http://localhost:8765). The server creates its data directory on first run. Capture, transcript reading, and search work without a model. To generate study notes, flashcards, quizzes, or answers in **Ask this course**, set `LLM_URL` to the full `/v1/chat/completions` URL of a reachable OpenAI-compatible endpoint and `LLM_MODEL` to its model ID before starting the server. The server sends requests without an API key. `/api/health` reports server status and checks the model host’s `/health` route.
 
 To enable Excalidraw, run this from the repository root in a separate terminal. The build is served at `/draw/`.
 
@@ -40,7 +40,7 @@ After pulling updates, reload **Study Notes** on `chrome://extensions` and refre
 - **While watching**, type in the side panel to anchor the note at the time you start typing. In **Transcript**, click a caption to seek or select text to save it as a note. Chrome queues unsynced notes and retries when the server is reachable. Drawing requires a server connection.
 - **Save captions** automatically from loaded lessons with **Save every lesson's transcript automatically** enabled by default. Caption availability depends on the course and your browser session. Use course transcript import when you want to fetch captions across multiple lessons.
 - **Generate study material** with **Process lesson** in the extension. It uses the transcript and any notes to produce a summary, timestamped key concepts, and flashcards. In **Library**, **Generate all** queues eligible lessons in a course.
-- **Review on the web** with notes, captures, and transcripts in context. Search for a passage or use **Ask your notes** for answers with source links. **Review** schedules flashcards with spaced repetition and lets you undo a review.
+- **Review on the web** with notes, captures, and transcripts in context. Search for a passage or select **Ask this course** in the Library for answers grounded in that course’s saved transcripts. Citations open the lesson and timestamp. **Review** schedules flashcards with spaced repetition and lets you undo a review.
 
 | Default shortcut (Option on Mac) | Action |
 | --- | --- |
@@ -72,6 +72,8 @@ deploy/deploy.sh            # Build the editor and deploy to the default rpi SSH
 ```
 
 The deployment installs the user-level `study-notes` service and a nightly backup timer. The Pi stores app data under `~/apps/study_notes/data/` and snapshots it to `~/backups/study_notes/` at 03:30, retaining roughly two weeks of backups. Set `LLM_URL` and `LLM_MODEL` in `~/.config/study-notes.env` on the Pi. Check the service with `systemctl --user status study-notes` or follow its logs with `journalctl --user -u study-notes -f`.
+
+Course Ask uses keyword search immediately after indexing and adds semantic search as each transcript’s vectors become ready. The deploy script installs the optional embedding runtime and checks the pinned BGE model on the Pi. For manual setup, install `server/requirements-embeddings.txt` and run `python server/course_embeddings.py <data-dir>/course-ask-model` before restarting. Omitting this setup leaves keyword-only retrieval available. Answer generation uses the configured Jetson endpoint. See the [course Ask design](docs/ASK_THIS_COURSE.md).
 
 ## Development checks
 

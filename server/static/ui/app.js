@@ -314,7 +314,7 @@ function courseSection(c, { openModule = null } = {}) {
       groups.get(m).push(l);
     });
   if (!groups.size) return "";
-  return `<section class="course-section" data-color="${courseIdentity(c)}"><div class="course-heading"><div class="course-monogram" data-color="${courseIdentity(c)}" aria-hidden="true">${icon(/aws|cloud/i.test(c.title) ? "layers" : "sparkles")}</div><div><h3>${esc(c.title)}</h3><p class="small muted">${c.lessons.some((l) => l.url_key.includes("deeplearning.ai")) ? "DeepLearning.AI · " : ""}${count(c.lessons.length, "saved lesson")}</p></div>${c.id ? `<div class="course-actions"><button class="button primary" data-action="generate-course" data-course-id="${c.id}" ${readyCount ? "" : "disabled"}>${icon("sparkles")}Generate all${readyCount ? " · " + readyCount : ""}</button>${activeCount ? `<span class="small muted" role="status">${activeCount} generating · <button class="text-button" data-action="retry-route">Refresh</button></span>` : ""}<button class="text-button" data-action="rename-course" data-course-id="${c.id}" aria-label="Rename ${esc(c.title)}">${icon("edit")}Rename course</button></div>` : ""}</div>${[
+  return `<section class="course-section" data-color="${courseIdentity(c)}"><div class="course-heading"><div class="course-monogram" data-color="${courseIdentity(c)}" aria-hidden="true">${icon(/aws|cloud/i.test(c.title) ? "layers" : "sparkles")}</div><div><h3>${esc(c.title)}</h3><p class="small muted">${c.lessons.some((l) => l.url_key.includes("deeplearning.ai")) ? "DeepLearning.AI · " : ""}${count(c.lessons.length, "saved lesson")}</p></div>${c.id ? `<div class="course-actions"><a class="button" href="#ask?course=${encodeURIComponent(c.slug)}">Ask this course</a><button class="button primary" data-action="generate-course" data-course-id="${c.id}" ${readyCount ? "" : "disabled"}>${icon("sparkles")}Generate all${readyCount ? " · " + readyCount : ""}</button>${activeCount ? `<span class="small muted" role="status">${activeCount} generating · <button class="text-button" data-action="retry-route">Refresh</button></span>` : ""}<button class="text-button" data-action="rename-course" data-course-id="${c.id}" aria-label="Rename ${esc(c.title)}">${icon("edit")}Rename course</button></div>` : ""}</div>${[
     ...groups,
   ]
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
@@ -1103,43 +1103,54 @@ async function searchPage(route, epoch) {
       $("#search-results").innerHTML = errorBox(e.message);
   }
 }
-function askExamples() {
-  const l = state.courses
-    .flatMap((c) => c.lessons)
-    .find((l) => /reflection/i.test(l.title));
-  return l
-    ? [
-        "How does reflection improve an AI output?",
-        "Why does external feedback help?",
-      ]
-    : ["What are the key ideas in my saved lessons?"];
-}
 function askPage(route) {
-  setBreadcrumb([["Ask your notes"]]);
-  const q = route.params.get("q") || state.ask?.q || "",
-    course = route.params.get("course") ?? state.ask?.course ?? "";
+  setBreadcrumb([["Ask this course"]]);
+  const courses = state.courses.filter((c) => c.id),
+    requested = route.params.get("course") ?? state.ask?.course,
+    selected = courses.find((c) => c.slug === requested) ?? courses.find((c) => c.lessons.some((l) => l.has_transcript)) ?? courses[0];
+  if (!selected) {
+    setPage("Ask this course", empty("No saved courses yet.", "Save a course transcript to ask a question."));
+    return;
+  }
+  const course = selected.slug,
+    q = route.params.get("q") ?? (state.ask?.course === course ? state.ask.q : "");
   if (!state.ask || q !== state.ask.q || course !== state.ask.course)
     state.ask = {
       q,
       course,
+      courseId: selected.id,
       answer: null,
       sources: [],
+      coverage: null,
       busy: false,
       error: null,
     };
   setPage(
-    "Ask your notes",
-    `<div class="intro illustrated-intro ask-intro"><span class="intro-symbol" aria-hidden="true">${icon("sparkles")}</span><div class="eyebrow">A little curiosity goes a long way</div><h1>Connect the ideas.</h1><p>Answers grounded in your saved lessons, with sources you can inspect.</p></div><div class="ask-layout"><div><form id="ask-form" class="ask-box"><label class="field-label" for="ask-q">Your question</label><textarea id="ask-q" placeholder="What would you like to understand?" required>${esc(q)}</textarea><div class="flex between wrap"><div class="flex wrap"><label class="small muted" for="ask-course">Course</label><select class="select" id="ask-course">${scopeOptions(course)}</select></div><button class="button primary" type="submit" id="ask-submit">${icon("sparkles")}Ask your notes</button></div><div class="health-note" id="ask-health"></div></form><div class="small muted">Try a question</div><div class="ask-examples">${askExamples()
-      .map(
-        (q) =>
-          `<button class="button subtle" data-action="ask-example" data-q="${esc(q)}">${esc(q)}</button>`,
-      )
-      .join(
-        "",
-      )}</div><div id="ask-answer"></div></div><aside class="sources-panel" aria-label="Answer sources"><div class="eyebrow">Sources</div><div id="ask-sources"><p class="small muted" style="margin-top:10px">Source passages will appear alongside your answer.</p></div></aside></div>`,
+    "Ask this course",
+    `<div class="intro ask-intro"><h1>${esc(selected.title)}</h1><p>Ask a question about the saved transcripts in this course.</p></div><div class="ask-layout"><div><form id="ask-form" class="ask-box"><label class="field-label" for="ask-q">Your question</label><textarea id="ask-q" placeholder="What would you like to understand?" maxlength="4000" required>${esc(q)}</textarea><div class="flex between wrap"><div class="flex wrap"><label class="small muted" for="ask-course">Course</label><select class="select" id="ask-course">${courses.map((c) => `<option value="${esc(c.slug)}" ${c.slug === course ? "selected" : ""}>${esc(c.title)}</option>`).join("")}</select></div><button class="button primary" type="submit" id="ask-submit">${icon("sparkles")}Ask this course</button></div><div class="health-note" id="ask-coverage" role="status"></div><div class="health-note" id="ask-health"></div></form><div id="ask-answer"></div></div><aside class="sources-panel" aria-label="Answer sources"><div class="eyebrow">Sources</div><div id="ask-sources"><p class="small muted" style="margin-top:10px">Source passages will appear alongside your answer.</p></div></aside></div>`,
   );
   renderAskResult();
   checkHealth();
+  refreshAskCoverage(state.ask);
+}
+async function refreshAskCoverage(ask) {
+  const previous = ask.coverage;
+  try {
+    const coverage = await api(`/api/courses/${ask.courseId}/ask`, { signal: state.controller.signal });
+    if (state.ask === ask && ask.coverage === previous && $("#ask-coverage")) {
+      ask.coverage = coverage;
+      renderAskCoverage(coverage);
+    }
+  } catch (error) {
+    if (error.name !== "AbortError" && state.ask === ask && $("#ask-coverage"))
+      $("#ask-coverage").textContent = "Transcript coverage is unavailable.";
+  }
+}
+function renderAskCoverage(coverage) {
+  if (coverage && $("#ask-coverage"))
+    $("#ask-coverage").textContent = coverage.saved
+      ? `${coverage.keyword} of ${coverage.saved} saved transcripts searchable · ${coverage.semantic} with semantic search`
+      : "No saved transcripts in this course.";
 }
 async function checkHealth() {
   const el = $("#ask-health");
@@ -1162,14 +1173,17 @@ function renderAskResult() {
   const a = state.ask;
   if (!$("#ask-answer") || !a) return;
   $("#ask-submit").disabled = a.busy;
+  renderAskCoverage(a.coverage);
   if (a.busy) {
     $("#ask-answer").innerHTML = loading(
       "Finding relevant passages and preparing your answer…",
     );
+    $("#ask-sources").textContent = "Finding source passages…";
     return;
   }
   if (a.error) {
     $("#ask-answer").innerHTML = errorBox(a.error, "retry-ask");
+    $("#ask-sources").textContent = "Source passages are unavailable for this request.";
     return;
   }
   if (a.answer === null) return;
@@ -1183,39 +1197,41 @@ function renderAskResult() {
       ? `<button class="cite" data-action="citation" data-source="${n}" aria-label="Inspect source ${n}">${n}</button>`
       : m,
   );
+  const hasAnswer = ["answered", "partial"].includes(a.status),
+    retryable = ["generation_unavailable", "index_pending", "source_changed"].includes(a.status);
   $("#ask-answer").innerHTML =
-    `<article class="ask-answer prose"><div class="ai-label">${icon("sparkles")}Answer from your saved material</div>${html}</article>`;
+    `<article class="ask-answer prose">${hasAnswer ? `<div class="ai-label">${icon("sparkles")}Answer from your saved transcripts</div>` : ""}${html}${retryable ? '<button class="button" data-action="retry-ask">Try again</button>' : ""}</article>`;
   $("#ask-sources").innerHTML = a.sources.length
-    ? `<div class="sources-list">${a.sources.map((s) => `<details class="source-card" id="source-${s.n}" ${s.n === firstCited ? "open" : ""}><summary><span class="tag">${s.n}</span> ${esc(s.title)}${s.t != null ? " · " + fmt(s.t) : ""}</summary><blockquote>${esc(s.text || "Open the source lesson to inspect this passage.")}</blockquote><a class="text-button" href="${lessonHref(s.lesson_id, s.kind === "note" ? "notes" : "transcript", s.t)}">Read in ${s.kind === "note" ? "my notes" : "transcript"}${icon("arrow")}</a>${s.t != null ? videoLink(s.url_key, s.t, "Watch at " + fmt(s.t)) : ""}</details>`).join("")}</div>`
+    ? `<div class="sources-list">${a.sources.map((s) => `<details class="source-card" id="source-${s.n}" ${s.n === firstCited ? "open" : ""}><summary><span class="tag">${s.n}</span> ${esc(s.title)}${s.t != null ? " · " + fmt(s.t) : ""}</summary><blockquote>${esc(s.text)}</blockquote><a class="text-button" href="${lessonHref(s.lesson_id, "transcript", s.anchor ?? s.t)}">Read in transcript${icon("arrow")}</a>${s.t != null ? videoLink(s.url_key, s.t, "Watch at " + fmt(s.t)) : ""}</details>`).join("")}</div>`
     : '<p class="small muted" style="margin-top:10px">No supporting passages were found in this scope.</p>';
 }
 async function askQuestion() {
   const a = state.ask,
     epoch = state.epoch;
   if (!a || a.busy) return;
-  const q = $("#ask-q").value.trim(),
-    course = $("#ask-course").value;
+  const q = $("#ask-q").value.trim();
   if (!q) {
     $("#ask-q").focus();
     return;
   }
   a.q = q;
-  a.course = course;
   a.busy = true;
   a.error = null;
   renderAskResult();
   try {
-    const result = await api("/api/ask", {
+    const result = await api(`/api/courses/${a.courseId}/ask`, {
       method: "POST",
-      body: { q, course_slug: course || null },
+      body: { q },
       signal: state.controller.signal,
     });
     if (epoch !== state.epoch) return;
     a.answer = result.answer;
     a.sources = result.sources;
+    a.status = result.status;
+    a.coverage = result.coverage;
     a.busy = false;
     renderAskResult();
-    announce("Answer ready with " + count(a.sources.length, "source") + ".");
+    announce(["answered", "partial"].includes(a.status) ? "Answer ready with " + count(a.sources.length, "source") + "." : a.answer);
   } catch (e) {
     a.busy = false;
     if (e.name !== "AbortError" && epoch === state.epoch) {
@@ -1638,10 +1654,7 @@ document.addEventListener("click", async (e) => {
       );
       renderReview();
     } else if (action === "review-more") reviewPage(state.current, state.epoch);
-    else if (action === "ask-example") {
-      $("#ask-q").value = b.dataset.q;
-      askQuestion();
-    } else if (action === "retry-ask") askQuestion();
+    else if (action === "retry-ask") askQuestion();
     else if (action === "citation") {
       const source = $("#source-" + b.dataset.source);
       if (source) {
@@ -1690,6 +1703,9 @@ document.addEventListener("input", (e) => {
     state.transcriptQuery = e.target.value;
     transcriptRows();
   }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.id === "ask-course") navigate("#ask?" + new URLSearchParams({ course: e.target.value }));
 });
 document.addEventListener(
   "toggle",

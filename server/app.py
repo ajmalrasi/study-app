@@ -12,6 +12,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -87,7 +88,16 @@ with db() as _c:
     # A restart kills any job that was running; mark it so the UI doesn't wait forever.
     _c.execute("UPDATE jobs SET status='error', error='server restarted' WHERE status IN ('queued','running')")
 
-app = FastAPI(title="Study Notes")
+@asynccontextmanager
+async def lifespan(app):
+    course_ask.start()
+    try:
+        yield
+    finally:
+        course_ask.close()
+
+
+app = FastAPI(title="Study Notes", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -162,18 +172,19 @@ def context_at(cues, t, before=20, after=5):
     return " ".join(c["text"] for c in cues if c["e"] >= t - before and c["s"] <= t + after)
 
 
-def transcript_chunks(cues, span=30):
+def transcript_chunks(cues, span=30, include_offsets=False):
     """Merge cues into ~30 s paragraphs: [{t, text}]."""
-    out, start, buf = [], None, []
-    for c in cues:
+    out, start, start_index, buf = [], None, 0, []
+    for i, c in enumerate(cues):
         if start is None:
             start = c["s"]
+            start_index = i
         buf.append(c["text"])
         if c["e"] - start >= span:
-            out.append({"t": start, "text": " ".join(buf)})
+            out.append({"t": start, "text": " ".join(buf), **({"start": start_index} if include_offsets else {})})
             start, buf = None, []
     if buf:
-        out.append({"t": start, "text": " ".join(buf)})
+        out.append({"t": start, "text": " ".join(buf), **({"start": start_index} if include_offsets else {})})
     return [{**p, "id": f"p-{round(p['t'] * 1000)}"} for p in out]
 
 
@@ -384,6 +395,7 @@ def delete_lesson(lesson_id: int):
                 remove_file(f)
         for table in ("notes", "cards", "jobs", "fts", "answers"):
             c.execute(f"DELETE FROM {table} WHERE lesson_id=?", (lesson_id,))
+        course_ask.clear(c, lesson_id)
         c.execute("DELETE FROM lessons WHERE id=?", (lesson_id,))
         for f in MARKDOWN.glob(f"*/{lesson_id:04d}-*.md"):
             f.unlink()
@@ -437,11 +449,14 @@ def set_transcript(lesson_id: int, body: TranscriptIn):
     cues = parse_vtt(body.vtt)
     if not cues:
         raise HTTPException(400, "no cues found in transcript")
+    transcript = json.dumps(cues)
     with db() as c:
         get_lesson(c, lesson_id)
         c.execute("UPDATE lessons SET transcript=?, transcript_src=? WHERE id=?",
-                  (json.dumps(cues), body.src, lesson_id))
+                  (transcript, body.src, lesson_id))
+        course_ask.index(c, lesson_id, transcript)
         write_markdown(c, lesson_id)
+    course_ask.wakeup.set()
     return {"ok": True, "cues": len(cues)}
 
 
@@ -561,15 +576,15 @@ class LLMError(Exception):
     pass
 
 
-def llm(system, user, max_tokens=1500):
+def llm(system, user, max_tokens=1500, *, timeout=300, attempts=4):
     """One chat completion. The LLM is shared with other apps, so retry politely when it's busy."""
     body = {"model": LLM_MODEL, "max_tokens": max_tokens, "temperature": 0.3,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     req = urllib.request.Request(LLM_URL, json.dumps(body).encode(), {"Content-Type": "application/json"})
     last = None
-    for attempt in range(4):
+    for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(req, timeout=300) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 text = json.load(r)["choices"][0]["message"]["content"] or ""
             return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
         except urllib.error.HTTPError as e:
@@ -578,7 +593,8 @@ def llm(system, user, max_tokens=1500):
                 break
         except OSError as e:
             last = str(e)
-        time.sleep(5 * (attempt + 1))
+        if attempt + 1 < attempts:
+            time.sleep(5 * (attempt + 1))
     raise LLMError(f"LLM failed ({LLM_URL}): {last}")
 
 
@@ -940,6 +956,46 @@ def ask(body: AskIn):
     except LLMError as e:
         raise HTTPException(502, str(e))
     return {"answer": answer, "sources": sources}
+
+
+# ---------- course transcript QA ----------
+
+_course_count_unsupported = set()
+
+
+def course_prompt_fits(system, user, output_tokens):
+    input_limit = int(os.environ.get("COURSE_ASK_INPUT_TOKENS", "6144"))
+    context_limit = int(os.environ.get("COURSE_ASK_CONTEXT_TOKENS", "8192"))
+    budget = min(input_limit, context_limit - output_tokens)
+    # UTF-8 byte count bounds Qwen's byte-backed tokenizer conservatively. Leave
+    # room for the chat template. Use the server counter for larger prompts.
+    if len(system.encode()) + len(user.encode()) + 128 <= budget:
+        return True
+    url = os.environ.get("COURSE_ASK_COUNT_URL", LLM_URL.split("/v1/")[0] + "/v1/messages/count_tokens")
+    if not url or url in _course_count_unsupported:
+        return False
+    payload = {"model": LLM_MODEL, "system": system, "messages": [{"role": "user", "content": user}]}
+    req = urllib.request.Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=2) as response:
+            count = json.load(response).get("input_tokens")
+        return type(count) is int and 0 < count <= budget - 128
+    except urllib.error.HTTPError as exc:
+        if exc.code in (404, 405, 501):
+            _course_count_unsupported.add(url)
+        return False
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+try:
+    from server.course_ask import CourseAsk
+except ModuleNotFoundError:
+    from course_ask import CourseAsk
+
+course_ask = CourseAsk(app, db, lambda cues: transcript_chunks(cues, include_offsets=True), fts_query,
+                       lambda system, user, limit: llm(system, user, limit, timeout=90, attempts=1),
+                       course_prompt_fits, Path(os.environ.get("COURSE_ASK_MODEL_DIR", DATA / "course-ask-model")))
 
 
 # ---------- flashcard review (Leitner boxes) ----------

@@ -6,6 +6,9 @@ HOST="${1:-rpi}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP=apps/study_notes
 
+echo "==> Checking SSH access to $HOST"
+ssh -o ConnectTimeout=5 "$HOST" true
+
 echo "==> Building Excalidraw editor"
 (cd "$ROOT/draw" && { [ -d node_modules ] || npm install --no-audit --no-fund; } && npm run build >/dev/null)
 
@@ -24,6 +27,8 @@ cd ~/$APP
 [ -d .venv ] || python3 -m venv .venv
 .venv/bin/pip install -q --upgrade pip
 .venv/bin/pip install -q -r requirements.txt
+.venv/bin/pip install -q -r requirements-embeddings.txt
+.venv/bin/python course_embeddings.py data/course-ask-model
 [ -f ~/.config/study-notes.env ] || printf 'LLM_URL=http://192.168.3.30:11434/v1/chat/completions\nLLM_MODEL=openclaw\n' > ~/.config/study-notes.env
 systemctl --user daemon-reload
 systemctl --user enable --now study-notes.service study-notes-backup.timer >/dev/null
