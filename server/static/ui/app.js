@@ -302,7 +302,7 @@ function lessonRow(l) {
 function generationReady(l) {
   return !l.processed && (l.has_transcript || l.note_count) && !["queued", "running"].includes(l.job_status);
 }
-function courseSection(c, { openModule = null } = {}) {
+function courseSection(c, { openModule, ask } = {}) {
   const readyCount = c.lessons.filter(generationReady).length;
   const activeCount = c.lessons.filter(l => ["queued", "running"].includes(l.job_status)).length;
   const groups = new Map();
@@ -313,8 +313,8 @@ function courseSection(c, { openModule = null } = {}) {
       if (!groups.has(m)) groups.set(m, []);
       groups.get(m).push(l);
     });
-  if (!groups.size) return "";
-  return `<section class="course-section" data-color="${courseIdentity(c)}"><div class="course-heading"><div class="course-monogram" data-color="${courseIdentity(c)}" aria-hidden="true">${icon(/aws|cloud/i.test(c.title) ? "layers" : "sparkles")}</div><div><h3>${esc(c.title)}</h3><p class="small muted">${c.lessons.some((l) => l.url_key.includes("deeplearning.ai")) ? "DeepLearning.AI · " : ""}${count(c.lessons.length, "saved lesson")}</p></div>${c.id ? `<div class="course-actions"><a class="button" href="#ask?course=${encodeURIComponent(c.slug)}">Ask this course</a><button class="button primary" data-action="generate-course" data-course-id="${c.id}" ${readyCount ? "" : "disabled"}>${icon("sparkles")}Generate all${readyCount ? " · " + readyCount : ""}</button>${activeCount ? `<span class="small muted" role="status">${activeCount} generating · <button class="text-button" data-action="retry-route">Refresh</button></span>` : ""}<button class="text-button" data-action="rename-course" data-course-id="${c.id}" aria-label="Rename ${esc(c.title)}">${icon("edit")}Rename course</button></div>` : ""}</div>${[
+  if (!groups.size && !ask) return "";
+  return `<section class="course-section" data-color="${courseIdentity(c)}"><div class="course-heading"><div class="course-monogram" data-color="${courseIdentity(c)}" aria-hidden="true">${icon(/aws|cloud/i.test(c.title) ? "layers" : "sparkles")}</div><div><h3>${ask || !c.id ? esc(c.title) : `<a href="${esc(courseUrl(c))}">${esc(c.title)}</a>`}</h3><p class="small muted">${c.lessons.some((l) => l.url_key.includes("deeplearning.ai")) ? "DeepLearning.AI · " : ""}${count(c.lessons.length, "saved lesson")}</p></div>${c.id ? `<div class="course-actions"><button class="button primary" data-action="generate-course" data-course-id="${c.id}" ${readyCount ? "" : "disabled"}>${icon("sparkles")}Generate all${readyCount ? " · " + readyCount : ""}</button>${activeCount ? `<span class="small muted" role="status">${activeCount} generating · <button class="text-button" data-action="retry-route">Refresh</button></span>` : ""}<button class="text-button" data-action="rename-course" data-course-id="${c.id}" aria-label="Rename ${esc(c.title)}">${icon("edit")}Rename course</button></div>` : ""}</div>${ask ? courseAskMarkup(ask) : ""}${groups.size ? "" : '<p class="small muted">No lessons match this filter.</p>'}${[
     ...groups,
   ]
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
@@ -328,14 +328,14 @@ function courseSection(c, { openModule = null } = {}) {
     })
     .join("")}</section>`;
 }
-function libraryContent(route, overview = false) {
-  const chosen = route.params.get("course") || "",
+function libraryContent(route, ask) {
+  const chosen = route.params.get("course"),
     courses = state.courses.filter((c) => !chosen || c.slug === chosen),
     pending = state.courses.reduce(
       (n, c) => n + c.lessons.filter((l) => !l.processed).length,
       0,
     );
-  return `<div class="section-heading"><h2>${overview ? "Your library" : "Saved lessons"}</h2>${overview ? '<a class="text-button" href="#library">Browse library ' + icon("external") + "</a>" : ""}</div><div class="filters" aria-label="Filter lessons"><button class="filter" data-action="filter" data-filter="all" aria-pressed="${state.filter === "all"}">All lessons</button><button class="filter" data-action="filter" data-filter="pending" aria-pressed="${state.filter === "pending"}">Needs study notes <span class="small">${pending}</span></button>${chosen ? '<a class="text-button" href="#library">All courses</a>' : ""}</div>${courses.map((c) => courseSection(c, { openModule: route.params.get("module") })).join("") || empty("Nothing here yet.", state.filter === "pending" ? "Your saved lessons already have study notes." : "Choose another course or save a lesson with the extension.")}`;
+  return `<div class="section-heading"><h2>Saved lessons</h2></div><div class="filters" aria-label="Filter lessons"><button class="filter" data-action="filter" data-filter="all" aria-pressed="${state.filter === "all"}">All lessons</button><button class="filter" data-action="filter" data-filter="pending" aria-pressed="${state.filter === "pending"}">Needs study notes <span class="small">${pending}</span></button>${chosen ? '<a class="text-button" href="#library">All courses</a>' : ""}</div>${courses.map((c) => courseSection(c, { openModule: route.params.get("module"), ask })).join("") || empty("Nothing here yet.", state.filter === "pending" ? "Your saved lessons already have study notes." : "Choose another course or save a lesson with the extension.")}`;
 }
 function courseIdentity(c) {
   let hash = 0;
@@ -376,10 +376,13 @@ async function home(route, epoch) {
     return;
   }
   if (route.page === "library") {
+    const course = state.courses.find((c) => c.id && c.slug === route.params.get("course"));
+    const ask = course ? prepareCourseAsk(course, route.params) : null;
     setPage(
       "Library",
-      `<div class="intro illustrated-intro library-intro"><span class="intro-symbol" aria-hidden="true">${icon("book")}</span><div class="eyebrow">A collection of discoveries</div><h1>Good ideas live here.</h1><p>Your notes, sketches, and lessons. Ready whenever curiosity calls.</p></div>${libraryContent(route)}`,
+      `<div class="intro illustrated-intro library-intro"><span class="intro-symbol" aria-hidden="true">${icon("book")}</span><div class="eyebrow">A collection of discoveries</div><h1>Good ideas live here.</h1><p>Your notes, sketches, and lessons. Ready whenever curiosity calls.</p></div>${libraryContent(route, ask)}`,
     );
+    if (ask) renderAskResult();
     const module = route.params.get("module");
     if (module)
       requestAnimationFrame(() => {
@@ -1059,7 +1062,7 @@ function searchForm(q = "", course = "", kind = "all") {
     )
     .join(
       "",
-    )}</select><a class="text-button" href="#ask">Ask for an explanation${icon("arrow")}</a></div></form>`;
+    )}</select></div></form>`;
 }
 async function searchPage(route, epoch) {
   const q = route.params.get("q") || "",
@@ -1103,41 +1106,48 @@ async function searchPage(route, epoch) {
       $("#search-results").innerHTML = errorBox(e.message);
   }
 }
-function askPage(route) {
-  setBreadcrumb([["Ask this course"]]);
-  const courses = state.courses.filter((c) => c.id),
-    requested = route.params.get("course") ?? state.ask?.course,
-    selected = courses.find((c) => c.slug === requested) ?? courses.find((c) => c.lessons.some((l) => l.has_transcript)) ?? courses[0];
-  if (!selected) {
-    setPage("Ask this course", empty("No saved courses yet.", "Save a course transcript to ask a question."));
-    return;
-  }
-  const course = selected.slug,
-    q = route.params.get("q") ?? (state.ask?.course === course ? state.ask.q : "");
-  if (!state.ask || q !== state.ask.q || course !== state.ask.course)
+function prepareCourseAsk(course, params) {
+  if (state.ask?.courseId !== course.id)
     state.ask = {
-      q,
-      course,
-      courseId: selected.id,
+      q: params.get("q") ?? "",
+      courseId: course.id,
+      course: course.slug,
+      open: params.has("ask") || params.has("q"),
       answer: null,
       sources: [],
       coverage: null,
       busy: false,
       error: null,
     };
-  setPage(
-    "Ask this course",
-    `<div class="intro ask-intro"><h1>${esc(selected.title)}</h1><p>Ask a question about the saved transcripts in this course.</p></div><div class="ask-layout"><div><form id="ask-form" class="ask-box"><label class="field-label" for="ask-q">Your question</label><textarea id="ask-q" placeholder="What would you like to understand?" maxlength="4000" required>${esc(q)}</textarea><div class="flex between wrap"><div class="flex wrap"><label class="small muted" for="ask-course">Course</label><select class="select" id="ask-course">${courses.map((c) => `<option value="${esc(c.slug)}" ${c.slug === course ? "selected" : ""}>${esc(c.title)}</option>`).join("")}</select></div><button class="button primary" type="submit" id="ask-submit">${icon("sparkles")}Ask this course</button></div><div class="health-note" id="ask-coverage" role="status"></div><div class="health-note" id="ask-health"></div></form><div id="ask-answer"></div></div><aside class="sources-panel" aria-label="Answer sources"><div class="eyebrow">Sources</div><div id="ask-sources"><p class="small muted" style="margin-top:10px">Source passages will appear alongside your answer.</p></div></aside></div>`,
-  );
-  renderAskResult();
+  return state.ask;
+}
+function courseAskMarkup(ask) {
+  return `<details class="course-ask" id="course-ask" ${ask.open ? "open" : ""}>
+    <summary>${icon("sparkles")} Ask this course</summary>
+    <form id="ask-form" class="ask-box">
+      <label class="field-label" for="ask-q">Your question</label>
+      <textarea id="ask-q" placeholder="Ask about this course’s transcripts" maxlength="4000" required>${esc(ask.q)}</textarea>
+      <div class="flex between wrap">
+        <div><div class="health-note" id="ask-coverage" role="status"></div><div class="health-note" id="ask-health"></div></div>
+        <button class="button primary" type="submit" id="ask-submit">${icon("sparkles")}Ask</button>
+      </div>
+    </form>
+    <div class="ask-layout">
+      <div id="ask-answer"></div>
+      <aside class="sources-panel" id="ask-source-panel" aria-label="Answer sources" hidden><div class="eyebrow">Sources</div><div id="ask-sources"></div></aside>
+    </div>
+  </details>`;
+}
+function loadCourseAsk(ask) {
   checkHealth();
-  refreshAskCoverage(state.ask);
+  refreshAskCoverage(ask);
 }
 async function refreshAskCoverage(ask) {
-  const previous = ask.coverage;
+  const previous = ask.coverage,
+    signal = state.controller.signal;
   try {
-    const coverage = await api(`/api/courses/${ask.courseId}/ask`, { signal: state.controller.signal });
-    if (state.ask === ask && ask.coverage === previous && $("#ask-coverage")) {
+    const coverage = await api(`/api/courses/${ask.courseId}/ask`, { signal });
+    if (!signal.aborted && state.ask === ask && ask.coverage === previous) {
       ask.coverage = coverage;
       renderAskCoverage(coverage);
     }
@@ -1172,18 +1182,17 @@ async function checkHealth() {
 function renderAskResult() {
   const a = state.ask;
   if (!$("#ask-answer") || !a) return;
+  $("#ask-source-panel").hidden = !a.sources.length || a.busy || Boolean(a.error);
   $("#ask-submit").disabled = a.busy;
   renderAskCoverage(a.coverage);
   if (a.busy) {
     $("#ask-answer").innerHTML = loading(
       "Finding relevant passages and preparing your answer…",
     );
-    $("#ask-sources").textContent = "Finding source passages…";
     return;
   }
   if (a.error) {
     $("#ask-answer").innerHTML = errorBox(a.error, "retry-ask");
-    $("#ask-sources").textContent = "Source passages are unavailable for this request.";
     return;
   }
   if (a.answer === null) return;
@@ -1208,13 +1217,16 @@ function renderAskResult() {
 async function askQuestion() {
   const a = state.ask,
     epoch = state.epoch;
-  if (!a || a.busy) return;
+  if (!a || a.busy || state.current?.page !== "library" ||
+      state.current.params.get("course") !== a.course) return;
   const q = $("#ask-q").value.trim();
   if (!q) {
     $("#ask-q").focus();
     return;
   }
   a.q = q;
+  a.answer = null;
+  a.sources = [];
   a.busy = true;
   a.error = null;
   renderAskResult();
@@ -1233,8 +1245,8 @@ async function askQuestion() {
     renderAskResult();
     announce(["answered", "partial"].includes(a.status) ? "Answer ready with " + count(a.sources.length, "source") + "." : a.answer);
   } catch (e) {
-    a.busy = false;
     if (e.name !== "AbortError" && epoch === state.epoch) {
+      a.busy = false;
       a.error = e.message;
       renderAskResult();
     }
@@ -1457,6 +1469,7 @@ async function route() {
   savePosition();
   clearTimeout(state.poll);
   state.controller?.abort();
+  if (state.ask) state.ask.busy = false;
   state.controller = new AbortController();
   const epoch = ++state.epoch,
     route = parseRoute();
@@ -1469,8 +1482,14 @@ async function route() {
   renderNavigation();
   window.scrollTo({ top: 0, behavior: "instant" });
   try {
+    if (route.page === "ask") {
+      const course = route.params.get("course");
+      if (course) route.params.set("ask", "open");
+      navigate(course ? "#library?" + route.params : "#library", true);
+      return;
+    }
     if (
-      !["overview", "library", "lesson", "review", "ask", "search", "quizzes"].includes(
+      !["overview", "library", "lesson", "review", "search", "quizzes"].includes(
         route.page,
       )
     ) {
@@ -1486,7 +1505,6 @@ async function route() {
     else if (route.page === "review") await reviewPage(route, epoch);
     else if (route.page === "search") await searchPage(route, epoch);
     else if (route.page === "quizzes") await quizWorkspace.load(route.params);
-    else askPage(route);
     if (epoch !== state.epoch) return;
     renderNavigation();
     if (state.focusTab && route.page === "lesson") {
@@ -1698,18 +1716,21 @@ document.addEventListener("submit", (e) => {
   }
 });
 document.addEventListener("input", (e) => {
+  if (e.target.id === "ask-q") state.ask.q = e.target.value;
   if (e.target.id === "practice-answer") saveDraft(e.target.value);
   if (e.target.id === "transcript-find") {
     state.transcriptQuery = e.target.value;
     transcriptRows();
   }
 });
-document.addEventListener("change", (e) => {
-  if (e.target.id === "ask-course") navigate("#ask?" + new URLSearchParams({ course: e.target.value }));
-});
 document.addEventListener(
   "toggle",
   (e) => {
+    if (e.target.id === "course-ask" && e.target.isConnected && state.ask &&
+        state.current?.params.get("course") === state.ask.course) {
+      state.ask.open = e.target.open;
+      if (state.ask.open) loadCourseAsk(state.ask);
+    }
     if (e.target.matches?.("details[data-module-key]")) {
       modules[e.target.dataset.moduleKey] = e.target.open;
       store("sn-open-modules", modules);

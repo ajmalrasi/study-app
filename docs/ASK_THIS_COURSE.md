@@ -4,9 +4,9 @@ Design and deployment acceptance criteria for transcript question answering in S
 
 ## Study workflow
 
-Open a course in the Library and choose **Ask this course**. The question form shows the course title and the number of indexed transcripts. Each question belongs to one course. The answer cites saved transcript passages, and each citation shows the lesson title and opens the passage or jumps to its timestamp in the video.
+Open a course in the Library and expand **Ask this course** above its modules. The form shows how many transcripts are searchable and uses the open course for every question. The answer appears on the course page and cites saved transcript passages. Each citation shows the lesson title and opens the passage or jumps to its timestamp in the video.
 
-An Agentic AI question about tool execution can draw on both *Planning with Code Execution* and *Multi-Agent Workflow*. A question opened from Context Engineering searches that course’s transcripts. Switching courses opens the new course’s question view and clears the displayed answer from the previous scope. Reuse the existing **Ask your notes** form and source-card patterns.
+An Agentic AI question about tool execution can draw on both *Planning with Code Execution* and *Multi-Agent Workflow*. A question asked from Context Engineering searches that course’s transcripts. When you open a different course, its question panel starts fresh.
 
 ## Architecture
 

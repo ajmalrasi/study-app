@@ -40,7 +40,7 @@ After pulling updates, reload **Study Notes** on `chrome://extensions` and refre
 - **While watching**, type in the side panel to anchor the note at the time you start typing. In **Transcript**, click a caption to seek or select text to save it as a note. Chrome queues unsynced notes and retries when the server is reachable. Drawing requires a server connection.
 - **Save captions** automatically from loaded lessons with **Save every lesson's transcript automatically** enabled by default. Caption availability depends on the course and your browser session. Use course transcript import when you want to fetch captions across multiple lessons.
 - **Generate study material** with **Process lesson** in the extension. It uses the transcript and any notes to produce a summary, timestamped key concepts, and flashcards. In **Library**, **Generate all** queues eligible lessons in a course.
-- **Review on the web** with notes, captures, and transcripts in context. Search for a passage or select **Ask this course** in the Library for answers grounded in that course’s saved transcripts. Citations open the lesson and timestamp. **Review** schedules flashcards with spaced repetition and lets you undo a review.
+- **Review on the web** with notes, captures, and transcripts in context. Search for a passage, or open a course in the Library and expand **Ask this course** above its modules for answers grounded in its saved transcripts. Citations open the lesson and timestamp. **Review** schedules flashcards with spaced repetition and lets you undo a review.
 
 | Default shortcut (Option on Mac) | Action |
 | --- | --- |
