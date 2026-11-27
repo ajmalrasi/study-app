@@ -58,6 +58,20 @@ assert.match((await ctx.fetchDlaiCourse('curriculum',target)).error,/empty/);
 reset();course.listing[0].content[0]={key:'unknown-subtopic',type:'subtopic'};
 assert.match((await ctx.fetchDlaiCourse('curriculum',target)).error,/incomplete/,'unknown outline structures fail explicitly');
 
+reset();
+const moduleLessonKeys = course.listing[0].content.map(entry => entry.key);
+const groupedLessonKeys = moduleLessonKeys.slice(1, 3);
+course.listing[0].content.splice(1, 2, {key:'1187',type:'subtopic'});
+course.subtopics = {'1187':{id:1187,slug:'example-subtopic',name:'Example subtopic',lessonKeys:groupedLessonKeys}};
+result = await ctx.fetchDlaiCourse('curriculum',target);
+assert.equal(result.complete,true);
+assert.equal(result.item_count,55);
+assert.deepEqual(Array.from(result.sections[0].items, item => item.id),moduleLessonKeys,'subtopic lessons stay in module order');
+groupedLessonKeys.push(moduleLessonKeys[0]);
+assert.match((await ctx.fetchDlaiCourse('curriculum',target)).error,/duplicate/,'duplicates across direct and grouped lessons are rejected');
+groupedLessonKeys.length = 0;
+assert.match((await ctx.fetchDlaiCourse('curriculum',target)).error,/incomplete/,'empty subtopics are rejected');
+
 reset();result=await ctx.fetchDlaiCourse('caption',target);
 assert(result.vtt.startsWith('WEBVTT'));
 assert.equal(calls[1],'https://video.deeplearning.ai/fixtures/en.vtt');

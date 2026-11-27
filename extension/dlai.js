@@ -40,16 +40,22 @@ export async function fetchDlaiCourse(action, targetUrl) {
         if (!id || sectionIds.has(id)) throw new Error("Module identifiers are ambiguous. Sync was not saved.");
         sectionIds.add(id);
         const section = { id, title: [module.moduleLabel, module.name].filter(Boolean).join(": ") || `Section ${index + 1}`, items: [] };
-        for (const entry of module.content) {
-          const lesson = lessons[entry.key];
-          if (entry.type !== "lesson" || !lesson || lesson.slug !== entry.key || seen.has(entry.key) || !/^[a-zA-Z0-9_-]+$/.test(entry.key))
+        const lessonKeys = module.content.flatMap(entry => {
+          if (entry?.type === "lesson") return [entry.key];
+          const keys = entry?.type === "subtopic" && course.subtopics?.[entry.key]?.lessonKeys;
+          if (!Array.isArray(keys) || !keys.length) throw new Error("The module outline is incomplete. Sync was not saved.");
+          return keys;
+        });
+        for (const key of lessonKeys) {
+          const lesson = lessons[key];
+          if (typeof key !== "string" || !/^[a-zA-Z0-9_-]+$/.test(key) || !lesson || lesson.slug !== key || seen.has(key))
             throw new Error("The module outline is incomplete or contains duplicate lessons. Sync was not saved.");
           if (!lesson.name || !lesson.type) throw new Error("Some lesson metadata is missing.");
-          seen.add(entry.key);
+          seen.add(key);
           const kind = lesson.type === "video" ? "video" : lesson.type === "quiz" ? "quiz"
             : lesson.type === "reading_material" ? "article" : "other";
-          const url = links.get(entry.key) || `${target.origin}/courses/${course.slug}/lesson/${entry.key}/${encodeURIComponent(lesson.name.toLowerCase().replace(/\s+/g, "-"))}`;
-          section.items.push({ id: entry.key, title: lesson.name, kind, url });
+          const url = links.get(key) || `${target.origin}/courses/${course.slug}/lesson/${key}/${encodeURIComponent(lesson.name.toLowerCase().replace(/\s+/g, "-"))}`;
+          section.items.push({ id: key, title: lesson.name, kind, url });
         }
         sections.push(section);
       }
